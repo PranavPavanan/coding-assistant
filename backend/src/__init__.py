@@ -1,0 +1,1 @@
+"""RAG GitHub Assistant Backend."""

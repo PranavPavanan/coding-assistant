@@ -1,0 +1,379 @@
+openapi: 3.0.3
+info:
+  title: RAG GitHub Assistant API
+  version: 1.0.0
+  description: API for discovering and querying GitHub repositories using RAG
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/search/repositories:
+    post:
+      summary: Search GitHub repositories by natural language
+      operationId: searchRepositories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Natural language description of requirements
+                  example: "Python HTTP library for API calls"
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 3
+                  description: Number of results to return
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Repository'
+        '400':
+          description: Invalid request
+        '500':
+          description: Search failed
+
+  /api/validate/url:
+    post:
+      summary: Validate GitHub repository URL
+      operationId: validateRepositoryUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: GitHub repository URL
+                  example: "https://github.com/psf/requests"
+      responses:
+        '200':
+          description: Repository is valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repository'
+        '400':
+          description: Invalid URL or repository not found
+        '413':
+          description: Repository too large
+
+  /api/repositories/{repo_id}:
+    get:
+      summary: Get repository details
+      operationId: getRepository
+      parameters:
+        - name: repo_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Repository ID (owner/repo format)
+          example: "psf/requests"
+      responses:
+        '200':
+          description: Repository details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repository'
+        '404':
+          description: Repository not found
+
+  /api/index/start:
+    post:
+      summary: Start repository indexing
+      operationId: startIndexing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - repository_id
+              properties:
+                repository_id:
+                  type: string
+                  description: Repository ID to index
+                  example: "psf/requests"
+      responses:
+        '202':
+          description: Indexing started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                    format: uuid
+                    description: Task ID for tracking progress
+        '400':
+          description: Invalid repository or already indexing
+        '409':
+          description: Repository already indexed
+
+  /api/index/status/{task_id}:
+    get:
+      summary: Get indexing status
+      operationId: getIndexingStatus
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Task ID from start indexing
+      responses:
+        '200':
+          description: Current status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending, running, completed, failed]
+                  progress:
+                    type: number
+                    minimum: 0
+                    maximum: 100
+                    description: Progress percentage
+                  message:
+                    type: string
+                    description: Current operation message
+                  error:
+                    type: string
+                    description: Error message if failed
+        '404':
+          description: Task not found
+
+  /api/index/current:
+    delete:
+      summary: Clear current indexed repository
+      operationId: clearCurrentIndex
+      responses:
+        '204':
+          description: Index cleared
+        '404':
+          description: No current index
+
+  /api/chat/query:
+    post:
+      summary: Submit a chat query
+      operationId: submitQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: User question
+                  example: "How does the Session class handle connection pooling?"
+      responses:
+        '200':
+          description: Query response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+        '400':
+          description: No repository indexed or invalid query
+        '503':
+          description: Model not available
+
+  /api/chat/history:
+    get:
+      summary: Get chat history
+      operationId: getChatHistory
+      responses:
+        '200':
+          description: Chat history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    query:
+                      $ref: '#/components/schemas/Query'
+                    response:
+                      $ref: '#/components/schemas/QueryResponse'
+
+  /api/chat/context:
+    get:
+      summary: Get current repository context
+      operationId: getChatContext
+      responses:
+        '200':
+          description: Current context
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repository:
+                    $ref: '#/components/schemas/Repository'
+                  indexed_at:
+                    type: string
+                    format: date-time
+                  total_chunks:
+                    type: integer
+                    description: Number of indexed chunks
+
+components:
+  schemas:
+    Repository:
+      type: object
+      required:
+        - id
+        - name
+        - owner
+        - url
+      properties:
+        id:
+          type: string
+          description: Repository ID (owner/repo)
+          example: "psf/requests"
+        name:
+          type: string
+          example: "requests"
+        owner:
+          type: string
+          example: "psf"
+        description:
+          type: string
+          example: "Python HTTP for Humans."
+        stars:
+          type: integer
+          example: 51200
+        forks:
+          type: integer
+          example: 9100
+        language:
+          type: string
+          example: "Python"
+        license:
+          type: string
+          example: "Apache-2.0"
+        last_updated:
+          type: string
+          format: date-time
+        size_kb:
+          type: integer
+          description: Size in KB
+          example: 2048
+        url:
+          type: string
+          format: uri
+          example: "https://github.com/psf/requests"
+        status:
+          type: string
+          enum: [not_indexed, indexing, indexed, failed]
+          example: "indexed"
+        indexed_at:
+          type: string
+          format: date-time
+
+    Query:
+      type: object
+      required:
+        - id
+        - text
+        - timestamp
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          example: "How does connection pooling work?"
+        timestamp:
+          type: string
+          format: date-time
+        retrieved_chunks:
+          type: integer
+          minimum: 0
+          maximum: 10
+
+    QueryResponse:
+      type: object
+      required:
+        - id
+        - text
+        - timestamp
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          description: AI-generated response
+        model:
+          type: string
+          example: "CodeLlama-7B"
+        context_chunks:
+          type: array
+          items:
+            type: string
+          description: IDs of retrieved chunks
+        confidence_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Retrieval quality score
+        timestamp:
+          type: string
+          format: date-time
+        response_time_ms:
+          type: integer
+          description: Response generation time

@@ -21,6 +21,10 @@ from src.models.query import (
     QueryRequest,
     QueryResponse,
     SourceReference,
+    SessionInfo,
+    ConversationInfo,
+    SessionClearRequest,
+    SessionClearResponse,
 )
 from src.config import settings
 
@@ -43,8 +47,10 @@ class RAGService:
         self.vector_store_path = vector_store_path
         self.model_path = model_path
 
-        # In-memory conversation storage (MVP - should use database in production)
-        self.conversations: dict[str, list[ChatMessage]] = {}
+        # In-memory session and conversation storage (MVP - should use database in production)
+        self.sessions: dict[str, SessionInfo] = {}  # session_id -> SessionInfo
+        self.conversations: dict[str, list[ChatMessage]] = {}  # conversation_id -> messages
+        self.session_conversations: dict[str, set[str]] = {}  # session_id -> set of conversation_ids
         
         # Response cache for common queries
         self.response_cache = {}
@@ -97,10 +103,10 @@ class RAGService:
             # Load the model with minimal settings first
             self.model = Llama(
                 model_path=str(model_file),
-                n_ctx=2048,  # Smaller context window
-                n_threads=2,  # Fewer threads
+                n_ctx=1024,  # Even smaller context window
+                n_threads=1,  # Single thread to avoid conflicts
                 n_gpu_layers=0,  # CPU only
-                verbose=True,  # Enable verbose for debugging
+                verbose=False,  # Less verbose to reduce output
             )
             
             print("SUCCESS: CodeLlama model loaded successfully!")
@@ -150,8 +156,30 @@ class RAGService:
             print(f"Cache hit for query: {request.query[:50]}...")
             return cached_response
         
-        # Generate or use provided conversation ID
+        # Generate or use provided session ID and conversation ID
+        session_id = request.session_id or str(uuid.uuid4())
         conversation_id = request.conversation_id or str(uuid.uuid4())
+
+        # Create session if it doesn't exist
+        if session_id not in self.sessions:
+            self.sessions[session_id] = SessionInfo(
+                session_id=session_id,
+                created_at=datetime.utcnow(),
+                last_activity=datetime.utcnow(),
+                conversation_count=0,
+                total_messages=0
+            )
+            self.session_conversations[session_id] = set()
+
+        # Create conversation if it doesn't exist
+        if conversation_id not in self.conversations:
+            self.conversations[conversation_id] = []
+            # Add conversation to session
+            self.session_conversations[session_id].add(conversation_id)
+            self.sessions[session_id].conversation_count += 1
+
+        # Update session activity
+        self.sessions[session_id].last_activity = datetime.utcnow()
 
         # Add user message to conversation history
         user_message = ChatMessage(
@@ -159,10 +187,8 @@ class RAGService:
             content=request.query,
             timestamp=datetime.utcnow(),
         )
-
-        if conversation_id not in self.conversations:
-            self.conversations[conversation_id] = []
         self.conversations[conversation_id].append(user_message)
+        self.sessions[session_id].total_messages += 1
 
         # Check if model is loaded
         if not self.is_initialized or self.model is None:
@@ -174,13 +200,28 @@ class RAGService:
             sources = []
             model = "error - model not loaded"
         else:
-            # Use actual CodeLlama model with basic retrieval from indexed content
-            # Retrieve relevant content from indexed files
-            retrieved_content, sources = self._retrieve_relevant_content(request.query)
-            
-            # Generate response using CodeLlama with retrieved context
-            answer = self.generate_response(request.query, retrieved_content, "")
-            model = "codellama-7b"
+            try:
+                # Use actual CodeLlama model with basic retrieval from indexed content
+                # Retrieve relevant content from indexed files
+                retrieved_content, sources = self._retrieve_relevant_content(request.query)
+                
+                # Build conversation context for contextual awareness
+                conversation_context = self._build_conversation_context(conversation_id)
+                
+                # Generate response using CodeLlama with retrieved context and conversation history
+                answer = self.generate_response(request.query, retrieved_content, conversation_context)
+                model = "codellama-7b"
+                
+            except Exception as e:
+                print(f"ERROR during query processing: {e}")
+                print(f"Error type: {type(e).__name__}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
+                
+                # Create error response
+                answer = f"Error processing query: {str(e)}\n\nPlease try again or check the server logs."
+                sources = []
+                model = "error - processing failed"
 
         # Create assistant message
         assistant_message = ChatMessage(
@@ -190,6 +231,7 @@ class RAGService:
             sources=sources,
         )
         self.conversations[conversation_id].append(assistant_message)
+        self.sessions[session_id].total_messages += 1
 
         processing_time = time.time() - start_time
 
@@ -198,6 +240,7 @@ class RAGService:
             response=answer,
             sources=sources,
             conversation_id=conversation_id,
+            session_id=session_id,
             model=model,
         )
         
@@ -344,6 +387,150 @@ class RAGService:
     def clear_conversations(self) -> None:
         """Clear all conversations."""
         self.conversations.clear()
+        self.sessions.clear()
+        self.session_conversations.clear()
+
+    def clear_session(self, request: SessionClearRequest) -> SessionClearResponse:
+        """
+        Clear session data.
+
+        Args:
+            request: Session clear request
+
+        Returns:
+            SessionClearResponse with operation result
+        """
+        try:
+            sessions_cleared = 0
+            conversations_cleared = 0
+
+            if request.clear_all:
+                # Clear all sessions
+                conversations_cleared = len(self.conversations)
+                sessions_cleared = len(self.sessions)
+                self.conversations.clear()
+                self.sessions.clear()
+                self.session_conversations.clear()
+                
+                return SessionClearResponse(
+                    success=True,
+                    message=f"Cleared all sessions and {conversations_cleared} conversations",
+                    sessions_cleared=sessions_cleared,
+                    conversations_cleared=conversations_cleared
+                )
+            else:
+                # Clear specific session
+                session_id = request.session_id
+                if session_id not in self.sessions:
+                    return SessionClearResponse(
+                        success=False,
+                        message=f"Session {session_id} not found",
+                        sessions_cleared=0,
+                        conversations_cleared=0
+                    )
+
+                # Count conversations to be cleared
+                if session_id in self.session_conversations:
+                    conversations_cleared = len(self.session_conversations[session_id])
+                    # Remove all conversations in this session
+                    for conv_id in self.session_conversations[session_id]:
+                        if conv_id in self.conversations:
+                            del self.conversations[conv_id]
+                    del self.session_conversations[session_id]
+
+                # Remove session
+                del self.sessions[session_id]
+                sessions_cleared = 1
+
+                return SessionClearResponse(
+                    success=True,
+                    message=f"Cleared session {session_id} and {conversations_cleared} conversations",
+                    sessions_cleared=sessions_cleared,
+                    conversations_cleared=conversations_cleared
+                )
+
+        except Exception as e:
+            return SessionClearResponse(
+                success=False,
+                message=f"Failed to clear session: {str(e)}",
+                sessions_cleared=0,
+                conversations_cleared=0
+            )
+
+    def get_session_info(self, session_id: str) -> Optional[SessionInfo]:
+        """
+        Get session information.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            SessionInfo or None if not found
+        """
+        return self.sessions.get(session_id)
+
+    def get_conversation_info(self, conversation_id: str) -> Optional[ConversationInfo]:
+        """
+        Get conversation information.
+
+        Args:
+            conversation_id: Conversation identifier
+
+        Returns:
+            ConversationInfo or None if not found
+        """
+        if conversation_id not in self.conversations:
+            return None
+
+        messages = self.conversations[conversation_id]
+        
+        # Find the session this conversation belongs to
+        session_id = None
+        for sid, conv_ids in self.session_conversations.items():
+            if conversation_id in conv_ids:
+                session_id = sid
+                break
+
+        if not session_id:
+            return None
+
+        return ConversationInfo(
+            conversation_id=conversation_id,
+            session_id=session_id,
+            created_at=messages[0].timestamp if messages else datetime.utcnow(),
+            last_activity=messages[-1].timestamp if messages else datetime.utcnow(),
+            message_count=len(messages)
+        )
+
+    def list_sessions(self) -> list[SessionInfo]:
+        """
+        List all active sessions.
+
+        Returns:
+            List of SessionInfo objects
+        """
+        return list(self.sessions.values())
+
+    def list_conversations_in_session(self, session_id: str) -> list[ConversationInfo]:
+        """
+        List all conversations in a session.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            List of ConversationInfo objects
+        """
+        if session_id not in self.session_conversations:
+            return []
+
+        conversations = []
+        for conv_id in self.session_conversations[session_id]:
+            conv_info = self.get_conversation_info(conv_id)
+            if conv_info:
+                conversations.append(conv_info)
+
+        return conversations
 
     def get_conversation_context(self, conversation_id: str) -> Optional[ChatContextResponse]:
         """
@@ -499,7 +686,7 @@ Answer:"""
             # Generate response using CodeLlama
             response = self.model(
                 prompt,
-                max_tokens=256,  # Reduced from 512
+                max_tokens=128,  # Further reduced to prevent memory issues
                 temperature=0.7,
                 top_p=0.95,
                 stop=["</s>", "[INST]", "<|endoftext|>", "\n\nUser Question:", "\n\nFile:"],
@@ -514,10 +701,17 @@ Answer:"""
             
             # Fact-check the response against source content
             generated_text = self._fact_check_response(generated_text, context, query)
+            
+            # Clean up response object to free memory
+            del response
+            
             return generated_text
             
         except Exception as e:
             print(f"Error generating response: {e}")
+            print(f"Error type: {type(e).__name__}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return f"Error generating response: {str(e)}"
 
     def _retrieve_relevant_content(self, query: str) -> tuple[List[str], List[SourceReference]]:

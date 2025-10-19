@@ -192,13 +192,14 @@ class IndexerService:
         Returns:
             IndexStats with current index information
         """
-        # Check if any index exists
+        # Check if any index exists - look for both FAISS files and metadata files
         index_files = list(self.indices_dir.glob("*.faiss")) if self.indices_dir.exists() else []
         metadata_files = (
             list(self.metadata_dir.glob("*.json")) if self.metadata_dir.exists() else []
         )
 
-        if not index_files and not metadata_files:
+        # If no metadata files exist, there's no indexed repository
+        if not metadata_files:
             return IndexStats(
                 is_indexed=False,
                 repository_name=None,
@@ -209,29 +210,50 @@ class IndexerService:
                 created_at=None,
             )
 
-        # Calculate stats
-        total_size = sum(f.stat().st_size for f in index_files if f.is_file())
-
-        # Try to load metadata
+        # Try to load metadata from the most recent metadata file
         repository_name = None
         last_updated = None
         created_at = None
         file_count = 0
+        total_size = 0
 
+        # Sort metadata files by modification time and get the most recent
         if metadata_files:
             try:
+                latest_metadata = max(metadata_files, key=lambda f: f.stat().st_mtime)
                 import json
 
-                with open(metadata_files[0]) as f:
+                with open(latest_metadata) as f:
                     metadata = json.load(f)
                     repository_name = metadata.get("repository_name")
                     file_count = metadata.get("file_count", 0)
+                    
+                    # Calculate total size from file entries in metadata
+                    files = metadata.get("files", [])
+                    total_size = sum(file_info.get("size", 0) for file_info in files)
+                    
                     if metadata.get("indexed_at"):
                         last_updated = datetime.fromisoformat(metadata["indexed_at"])
                     if metadata.get("created_at"):
                         created_at = datetime.fromisoformat(metadata["created_at"])
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error loading metadata: {e}")
+                # If metadata loading fails, still consider it indexed if files exist
+                if metadata_files:
+                    return IndexStats(
+                        is_indexed=True,
+                        repository_name="Unknown Repository",
+                        file_count=0,
+                        total_size=0,
+                        vector_count=0,
+                        last_updated=None,
+                        created_at=None,
+                    )
+
+        # Also check for FAISS files for additional size calculation
+        if index_files:
+            faiss_size = sum(f.stat().st_size for f in index_files if f.is_file())
+            total_size += faiss_size
 
         return IndexStats(
             is_indexed=True,

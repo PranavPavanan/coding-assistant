@@ -2,11 +2,12 @@
  * Chat interface component for querying code
  */
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Code, FileText } from 'lucide-react'
+import { Send, Loader2, Code, FileText, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAppStore } from '@/store/appStore'
 import { apiClient } from '@/services/api'
+import { ConversationTabs } from '@/components/ConversationTabs'
 
 export function ChatInterface() {
   const [input, setInput] = useState('')
@@ -16,13 +17,34 @@ export function ChatInterface() {
   const {
     messages,
     conversationId,
+    sessionId,
+    currentConversation,
+    conversations,
     isQuerying,
     indexStats,
     addMessage,
     setConversationId,
+    setSessionId,
+    setCurrentConversation,
+    createNewConversation,
+    updateConversation,
     setIsQuerying,
     clearMessages,
+    setIndexStats,
   } = useAppStore()
+
+  // Load index stats on mount
+  useEffect(() => {
+    const loadIndexStats = async () => {
+      try {
+        const stats = await apiClient.getIndexStats()
+        setIndexStats(stats)
+      } catch (err) {
+        console.error('Failed to load index stats:', err)
+      }
+    }
+    loadIndexStats()
+  }, [setIndexStats])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -56,20 +78,49 @@ export function ChatInterface() {
     setIsQuerying(true)
 
     try {
-      const response = await apiClient.chatQuery(input, conversationId || undefined)
+      const response = await apiClient.chatQuery(
+        input, 
+        conversationId || undefined, 
+        sessionId || undefined
+      )
 
+      // Handle session and conversation IDs
+      if (!sessionId) {
+        setSessionId(response.session_id)
+      }
+      
       if (!conversationId) {
         setConversationId(response.conversation_id)
+        
+        // Create new conversation if this is the first message
+        if (!currentConversation) {
+          const newConversation = {
+            id: response.conversation_id,
+            title: 'New Chat',
+            messages: [userMessage],
+            createdAt: new Date().toISOString(),
+            lastActivity: new Date().toISOString()
+          }
+          setCurrentConversation(newConversation)
+        }
       }
 
       const assistantMessage = {
         role: 'assistant' as const,
-        content: response.answer,
+        content: response.answer || response.response,
         timestamp: new Date().toISOString(),
         sources: response.sources || response.references,
       }
 
       addMessage(assistantMessage)
+      
+      // Update conversation title based on first user message
+      if (currentConversation && currentConversation.title === 'New Chat' && currentConversation.messages.length === 1) {
+        const title = input.slice(0, 30)
+        updateConversation(currentConversation.id, {
+          title: title.length < input.length ? `${title}...` : title
+        })
+      }
     } catch (err: unknown) {
       const errorDetail =
         err &&
@@ -91,25 +142,43 @@ export function ChatInterface() {
   }
 
   const handleClearChat = () => {
-    if (confirm('Clear chat history?')) {
+    if (confirm('Clear current conversation?')) {
       clearMessages()
       setError(null)
     }
   }
 
+  const handleNewChat = () => {
+    createNewConversation()
+  }
+
   return (
     <div className="flex flex-col h-full space-y-4">
+      
+      {/* Conversation Tabs */}
+      {conversations.length > 0 && <ConversationTabs />}
+      
       <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>AI Code Assistant</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClearChat}
-            disabled={messages.length === 0}
-          >
-            Clear Chat
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewChat}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              New Chat
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearChat}
+              disabled={messages.length === 0}
+            >
+              Clear Chat
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden flex flex-col p-0">
           {!indexStats?.is_indexed ? (
@@ -190,13 +259,25 @@ export function ChatInterface() {
             </div>
           )}
 
+          {/* Repository name display above query input */}
+          {indexStats?.is_indexed && indexStats.repository_name && (
+            <div className="px-6 py-3 bg-muted/50 border-t">
+              <div className="flex items-center gap-2 text-sm">
+                <Code className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">What do you want to know about</span>
+                <span className="font-semibold text-foreground">{indexStats.repository_name}</span>
+                <span className="text-muted-foreground">?</span>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="p-6 border-t">
             <div className="flex gap-2">
               <input
                 type="text"
                 placeholder={
                   indexStats?.is_indexed
-                    ? 'Ask a question about the code...'
+                    ? `Ask a question about ${indexStats.repository_name || 'the code'}...`
                     : 'Index a repository first...'
                 }
                 value={input}

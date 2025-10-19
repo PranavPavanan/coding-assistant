@@ -7,6 +7,10 @@ from src.models.query import (
     ChatHistoryResponse,
     QueryRequest,
     QueryResponse,
+    SessionInfo,
+    ConversationInfo,
+    SessionClearRequest,
+    SessionClearResponse,
 )
 from src.models.response import ErrorResponse, NotFoundResponse
 from src.services import get_rag_service
@@ -148,3 +152,136 @@ async def clear_chat_history(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear history: {str(e)}") from e
+
+
+@router.post(
+    "/chat/session/clear",
+    response_model=SessionClearResponse,
+    responses={400: {"model": ErrorResponse}},
+    tags=["chat", "session"],
+)
+async def clear_session(request: SessionClearRequest) -> SessionClearResponse:
+    """
+    Clear session data and all associated conversations.
+
+    Args:
+        request: Session clear request with session_id and optional clear_all flag
+
+    Returns:
+        SessionClearResponse with operation result
+
+    Raises:
+        HTTPException: If clear operation fails
+    """
+    try:
+        rag_service = get_rag_service()
+        result = rag_service.clear_session(request)
+        
+        if not result.success:
+            raise HTTPException(
+                status_code=400,
+                detail=result.message,
+            )
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear session: {str(e)}") from e
+
+
+@router.get(
+    "/chat/session/{session_id}",
+    response_model=SessionInfo,
+    responses={404: {"model": NotFoundResponse}},
+    tags=["chat", "session"],
+)
+async def get_session_info(session_id: str) -> SessionInfo:
+    """
+    Get session information.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        SessionInfo with session details
+
+    Raises:
+        HTTPException: If session not found
+    """
+    rag_service = get_rag_service()
+    session_info = rag_service.get_session_info(session_id)
+
+    if session_info is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session {session_id} not found",
+        )
+
+    return session_info
+
+
+@router.get(
+    "/chat/session/{session_id}/conversations",
+    response_model=list[ConversationInfo],
+    tags=["chat", "session"],
+)
+async def list_conversations_in_session(session_id: str) -> list[ConversationInfo]:
+    """
+    List all conversations in a session.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        List of ConversationInfo objects
+    """
+    rag_service = get_rag_service()
+    return rag_service.list_conversations_in_session(session_id)
+
+
+@router.get(
+    "/chat/conversation/{conversation_id}",
+    response_model=ConversationInfo,
+    responses={404: {"model": NotFoundResponse}},
+    tags=["chat", "conversation"],
+)
+async def get_conversation_info(conversation_id: str) -> ConversationInfo:
+    """
+    Get conversation information.
+
+    Args:
+        conversation_id: Conversation identifier
+
+    Returns:
+        ConversationInfo with conversation details
+
+    Raises:
+        HTTPException: If conversation not found
+    """
+    rag_service = get_rag_service()
+    conversation_info = rag_service.get_conversation_info(conversation_id)
+
+    if conversation_info is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conversation {conversation_id} not found",
+        )
+
+    return conversation_info
+
+
+@router.get(
+    "/chat/sessions",
+    response_model=list[SessionInfo],
+    tags=["chat", "session"],
+)
+async def list_sessions() -> list[SessionInfo]:
+    """
+    List all active sessions.
+
+    Returns:
+        List of SessionInfo objects
+    """
+    rag_service = get_rag_service()
+    return rag_service.list_sessions()

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Environment Debug</title>
+</head>
+<body>
+    <h1>Environment Debug</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        // Test what the environment variables are
+        const resultsDiv = document.getElementById('results');
+        
+        console.log('Environment check:');
+        console.log('import.meta.env:', import.meta.env);
+        console.log('VITE_API_URL:', import.meta.env.VITE_API_URL);
+        
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+        console.log('Final API_BASE_URL:', API_BASE_URL);
+        
+        resultsDiv.innerHTML = `
+            <h2>Environment Variables:</h2>
+            <pre>${JSON.stringify(import.meta.env, null, 2)}</pre>
+            <p><strong>VITE_API_URL:</strong> ${import.meta.env.VITE_API_URL || 'undefined'}</p>
+            <p><strong>Final API_BASE_URL:</strong> ${API_BASE_URL}</p>
+        `;
+    </script>
+</body>
+</html>

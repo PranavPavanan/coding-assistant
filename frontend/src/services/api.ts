@@ -4,12 +4,16 @@
 import axios from 'axios'
 import type { AxiosInstance } from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const API_BASE_URL = '/api'
+
+console.log('🔍 DEBUG: VITE_API_URL from env:', import.meta.env.VITE_API_URL)
+console.log('🔍 DEBUG: Final API_BASE_URL:', API_BASE_URL)
 
 class ApiClient {
   private client: AxiosInstance
 
   constructor() {
+    console.log('🔍 DEBUG: Creating ApiClient with baseURL:', API_BASE_URL)
     this.client = axios.create({
       baseURL: API_BASE_URL,
       headers: {
@@ -17,6 +21,7 @@ class ApiClient {
       },
       timeout: 30000, // 30 seconds
     })
+    console.log('🔍 DEBUG: Axios client created with baseURL:', this.client.defaults.baseURL)
 
     // Response interceptor for error handling
     this.client.interceptors.response.use(
@@ -73,6 +78,9 @@ class ApiClient {
 
   // Get index stats
   async getIndexStats() {
+    console.log('🔍 DEBUG: API Base URL:', this.client.defaults.baseURL)
+    console.log('🔍 DEBUG: Full URL will be:', this.client.defaults.baseURL + '/index/stats')
+    console.log('🔍 DEBUG: Environment VITE_API_URL:', import.meta.env.VITE_API_URL)
     const response = await this.client.get('/index/stats')
     return response.data
   }
@@ -84,10 +92,11 @@ class ApiClient {
   }
 
   // Chat query
-  async chatQuery(query: string, conversationId?: string) {
+  async chatQuery(query: string, conversationId?: string, sessionId?: string) {
     const response = await this.client.post('/chat/query', {
       query,
       conversation_id: conversationId,
+      session_id: sessionId,
     })
     return response.data
   }
@@ -118,6 +127,35 @@ class ApiClient {
     const response = await this.client.delete('/chat/history', {
       params: conversationId ? { conversation_id: conversationId } : {},
     })
+    return response.data
+  }
+
+  // Session management
+  async clearSession(sessionId: string, clearAll: boolean = false) {
+    const response = await this.client.post('/chat/session/clear', {
+      session_id: sessionId,
+      clear_all: clearAll,
+    })
+    return response.data
+  }
+
+  async getSessionInfo(sessionId: string) {
+    const response = await this.client.get(`/chat/session/${sessionId}`)
+    return response.data
+  }
+
+  async getConversationInfo(conversationId: string) {
+    const response = await this.client.get(`/chat/conversation/${conversationId}`)
+    return response.data
+  }
+
+  async listConversationsInSession(sessionId: string) {
+    const response = await this.client.get(`/chat/session/${sessionId}/conversations`)
+    return response.data
+  }
+
+  async listSessions() {
+    const response = await this.client.get('/chat/sessions')
     return response.data
   }
 }

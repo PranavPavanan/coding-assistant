@@ -27,6 +27,21 @@ export interface ChatMessage {
   }>
 }
 
+export interface Conversation {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: string
+  lastActivity: string
+}
+
+export interface Session {
+  id: string
+  conversations: Conversation[]
+  createdAt: string
+  lastActivity: string
+}
+
 export interface IndexingTask {
   task_id: string
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -58,6 +73,9 @@ interface AppState {
   // Chat state
   messages: ChatMessage[]
   conversationId: string | null
+  sessionId: string | null
+  currentConversation: Conversation | null
+  conversations: Conversation[]
   isQuerying: boolean
 
   // UI state
@@ -75,8 +93,16 @@ interface AppState {
   addMessage: (message: ChatMessage) => void
   setMessages: (messages: ChatMessage[]) => void
   setConversationId: (id: string | null) => void
+  setSessionId: (id: string | null) => void
+  setCurrentConversation: (conversation: Conversation | null) => void
+  setConversations: (conversations: Conversation[]) => void
+  addConversation: (conversation: Conversation) => void
+  updateConversation: (id: string, updates: Partial<Conversation>) => void
+  switchToConversation: (id: string) => void
+  createNewConversation: () => void
   setIsQuerying: (isQuerying: boolean) => void
   clearMessages: () => void
+  clearAllConversations: () => void
 
   setActiveTab: (tab: AppState['activeTab']) => void
 
@@ -93,6 +119,9 @@ const initialState = {
   indexStats: null,
   messages: [],
   conversationId: null,
+  sessionId: null,
+  currentConversation: null,
+  conversations: [],
   isQuerying: false,
   activeTab: 'search' as const,
 }
@@ -111,11 +140,101 @@ export const useAppStore = create<AppState>((set) => ({
   setIndexStats: (stats) => set({ indexStats: stats }),
 
   // Chat actions
-  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  addMessage: (message) => set((state) => {
+    const newMessages = [...state.messages, message]
+    
+    // Update current conversation if it exists
+    if (state.currentConversation) {
+      const updatedConversation = {
+        ...state.currentConversation,
+        messages: newMessages,
+        lastActivity: new Date().toISOString()
+      }
+      
+      const updatedConversations = state.conversations.map(conv =>
+        conv.id === state.currentConversation!.id ? updatedConversation : conv
+      )
+      
+      return {
+        messages: newMessages,
+        currentConversation: updatedConversation,
+        conversations: updatedConversations
+      }
+    }
+    
+    return { messages: newMessages }
+  }),
+  
   setMessages: (messages) => set({ messages }),
   setConversationId: (id) => set({ conversationId: id }),
+  setSessionId: (id) => set({ sessionId: id }),
+  setCurrentConversation: (conversation) => set({ 
+    currentConversation: conversation,
+    messages: conversation?.messages || [],
+    conversationId: conversation?.id || null
+  }),
+  setConversations: (conversations) => set({ conversations }),
+  
+  addConversation: (conversation) => set((state) => ({
+    conversations: [...state.conversations, conversation],
+    currentConversation: conversation,
+    messages: conversation.messages,
+    conversationId: conversation.id
+  })),
+  
+  updateConversation: (id, updates) => set((state) => {
+    const updatedConversations = state.conversations.map(conv =>
+      conv.id === id ? { ...conv, ...updates } : conv
+    )
+    
+    const updatedCurrent = state.currentConversation?.id === id 
+      ? { ...state.currentConversation, ...updates }
+      : state.currentConversation
+    
+    return {
+      conversations: updatedConversations,
+      currentConversation: updatedCurrent
+    }
+  }),
+  
+  switchToConversation: (id) => set((state) => {
+    const conversation = state.conversations.find(conv => conv.id === id)
+    if (conversation) {
+      return {
+        currentConversation: conversation,
+        messages: conversation.messages,
+        conversationId: conversation.id
+      }
+    }
+    return state
+  }),
+  
+  createNewConversation: () => set((state) => {
+    const newConversation: Conversation = {
+      id: `conv-${Date.now()}`,
+      title: 'New Chat',
+      messages: [],
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString()
+    }
+    
+    return {
+      conversations: [...state.conversations, newConversation],
+      currentConversation: newConversation,
+      messages: [],
+      conversationId: newConversation.id
+    }
+  }),
+  
   setIsQuerying: (isQuerying) => set({ isQuerying }),
   clearMessages: () => set({ messages: [], conversationId: null }),
+  clearAllConversations: () => set({ 
+    conversations: [], 
+    currentConversation: null, 
+    messages: [], 
+    conversationId: null,
+    sessionId: null
+  }),
 
   // UI actions
   setActiveTab: (tab) => set({ activeTab: tab }),

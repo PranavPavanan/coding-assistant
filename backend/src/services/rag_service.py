@@ -1,17 +1,21 @@
 """RAG (Retrieval-Augmented Generation) pipeline service."""
 import json
 import uuid
+import logging
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
 import time
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 try:
     from llama_cpp import Llama
     LLAMA_AVAILABLE = True
 except ImportError:
     LLAMA_AVAILABLE = False
-    print("Warning: llama-cpp-python not available. Install with: pip install llama-cpp-python")
+    logger.warning("llama-cpp-python not available. Install with: pip install llama-cpp-python")
 
 from src.models.query import (
     ChatContextResponse,
@@ -72,44 +76,39 @@ class RAGService:
             True if initialization successful
         """
         try:
+            # Get model configuration
+            model_config = settings.get_model_config()
             model_path = settings.get_model_path()
-            # Loads: backend/models/codellama-7b-python-ai-assistant.F16.gguf
+            model_name = settings.MODEL_NAME
             
             # Check if llama-cpp-python is available
             if not LLAMA_AVAILABLE:
-                print(f"ERROR: llama-cpp-python not installed")
-                print("   Install with: pip install llama-cpp-python")
-                self.is_initialized = False
-                return False
-            
-            # Check if model path is configured
-            if not model_path:
-                print(f"ERROR: MODEL_PATH not configured")
-                print("   Set MODEL_PATH in .env file")
+                logger.error("llama-cpp-python not installed. Install with: pip install llama-cpp-python")
                 self.is_initialized = False
                 return False
             
             # Check if model file exists
-            model_file = Path(model_path)
-            if not model_file.exists():
-                print(f"ERROR: Model file not found at {model_path}")
-                print("   Download CodeLlama GGUF model and place in backend/models/ directory")
+            if not model_path.exists():
+                logger.error(f"Model file not found at {model_path}")
+                logger.error(f"Expected filename: {model_config['filename']}")
+                logger.error(f"Available models: {settings.get_available_models()}")
+                logger.error("To switch models, change MODEL_NAME in .env file or config.py")
                 self.is_initialized = False
                 return False
             
-            print(f"Loading CodeLlama model from {model_path}...")
-            print("This may take a few minutes on first load...")
+            logger.info(f"Loading {model_name} model from {model_path}")
+            logger.info(f"Context: {model_config['context_length']}, Threads: {model_config['n_threads']}, Size: {model_path.stat().st_size / (1024*1024*1024):.2f} GB")
             
-            # Load the model with minimal settings first
+            # Load the model with configuration-specific settings
             self.model = Llama(
-                model_path=str(model_file),
-                n_ctx=1024,  # Even smaller context window
-                n_threads=1,  # Single thread to avoid conflicts
-                n_gpu_layers=0,  # CPU only
-                verbose=False,  # Less verbose to reduce output
+                model_path=str(model_path),
+                n_ctx=model_config["context_length"],
+                n_threads=model_config["n_threads"],
+                n_gpu_layers=model_config["n_gpu_layers"],
+                verbose=False,  # Disable verbose output
             )
             
-            print("SUCCESS: CodeLlama model loaded successfully!")
+            logger.info(f"{model_name} model loaded successfully")
 
             # TODO: Load FAISS index
             # TODO: Load sentence-transformers for embeddings
@@ -118,22 +117,25 @@ class RAGService:
             return True
         except Exception as e:
             error_msg = str(e)
-            print(f"ERROR: RAG initialization failed: {e}")
-            print(f"   Error type: {type(e).__name__}")
+            logger.error(f"RAG initialization failed: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
             
             # Provide specific guidance for common errors
             if "key not found in model: tokenizer.ggml.tokens" in error_msg:
-                print("   This appears to be a LoRA adapter model that requires a base model.")
-                print("   Solution: Download a base CodeLlama model and merge with this adapter.")
-                print("   Alternative: Use a complete GGUF model instead of an adapter.")
+                logger.error("This appears to be a LoRA adapter model that requires a base model")
+                logger.error("Solution: Download a base model and merge, or use a complete GGUF model")
             elif "failed to load model" in error_msg:
-                print("   The model file may be corrupted or incompatible.")
-                print("   Solution: Re-download the model file or try a different model.")
+                logger.error("The model file may be corrupted or incompatible")
+                logger.error("Solution: Re-download the model file or try a different model")
+            elif "AssertionError" in error_msg:
+                logger.error("The model file appears to be corrupted or incomplete")
+                logger.error("Solution: Re-download the model file or use a different model")
             else:
-                print(f"   Error details: {error_msg}")
                 import traceback
-                print(f"   Traceback: {traceback.format_exc()}")
+                logger.error(f"Error details: {error_msg}")
+                logger.debug(f"Traceback: {traceback.format_exc()}")
             
+            # Don't fallback to mock mode - show the actual error
             self.is_initialized = False
             return False
 
@@ -153,7 +155,7 @@ class RAGService:
         cache_key = f"{request.query.lower().strip()}:{request.max_sources or 5}"
         if cache_key in self.response_cache:
             cached_response = self.response_cache[cache_key]
-            print(f"Cache hit for query: {request.query[:50]}...")
+            logger.debug(f"Cache hit for query: {request.query[:50]}...")
             return cached_response
         
         # Generate or use provided session ID and conversation ID
@@ -191,14 +193,41 @@ class RAGService:
         self.sessions[session_id].total_messages += 1
 
         # Check if model is loaded
-        if not self.is_initialized or self.model is None:
-            error_msg = "RAG service not initialized. Model failed to load during startup."
-            print(f"ERROR: {error_msg}")
+        if not self.is_initialized:
+            error_msg = "RAG service not initialized."
+            logger.error(error_msg)
             
-            # Create error response
-            answer = f"Error: {error_msg}\n\nPlease check the server logs for initialization errors and restart the server after fixing the issues."
+            # Create detailed debug response
+            model_path = settings.get_model_path()
+            model_config = settings.get_model_config()
+            
+            answer = f"""DEBUG: Model Loading Failed
+
+Error: {error_msg}
+
+Debug Information:
+- Model Name: {settings.MODEL_NAME}
+- Expected File: {model_config['filename']}
+- Full Path: {model_path}
+- File Exists: {model_path.exists()}
+- File Size: {model_path.stat().st_size if model_path.exists() else 'N/A'} bytes
+
+Common Issues:
+1. Model file not found - check the filename in config.py
+2. Model file corrupted - try re-downloading
+3. Wrong model format - ensure it's a valid GGUF file
+4. Insufficient memory - try a smaller model
+
+To fix:
+1. Check the server logs for detailed error messages
+2. Verify the model file exists and is not corrupted
+3. Try downloading a different model
+4. Update the filename in backend/src/config.py
+
+The contextual awareness system is working, but you need a valid model file."""
+            
             sources = []
-            model = "error - model not loaded"
+            model = "debug - model not loaded"
         else:
             try:
                 # Use actual CodeLlama model with basic retrieval from indexed content
@@ -210,13 +239,13 @@ class RAGService:
                 
                 # Generate response using CodeLlama with retrieved context and conversation history
                 answer = self.generate_response(request.query, retrieved_content, conversation_context)
-                model = "codellama-7b"
+                model = settings.MODEL_NAME  # Use configured model name
                 
             except Exception as e:
-                print(f"ERROR during query processing: {e}")
-                print(f"Error type: {type(e).__name__}")
+                logger.error(f"Error during query processing: {e}")
+                logger.error(f"Error type: {type(e).__name__}")
                 import traceback
-                print(f"Traceback: {traceback.format_exc()}")
+                logger.debug(f"Traceback: {traceback.format_exc()}")
                 
                 # Create error response
                 answer = f"Error processing query: {str(e)}\n\nPlease try again or check the server logs."
@@ -251,7 +280,7 @@ class RAGService:
             del self.response_cache[oldest_key]
         
         self.response_cache[cache_key] = response
-        print(f"Response cached for query: {request.query[:50]}...")
+        logger.debug(f"Response cached for query: {request.query[:50]}...")
         
         return response
     
@@ -296,8 +325,7 @@ class RAGService:
         return ChatHistoryResponse(
             conversation_id=conversation_id,
             messages=messages,
-            total_messages=len(self.conversations[conversation_id]),
-            created_at=messages[0].timestamp if messages else datetime.utcnow(),
+            total_count=len(self.conversations[conversation_id]),
         )
 
     def get_chat_context(self, conversation_id: str) -> Optional[ChatContextResponse]:
@@ -640,56 +668,84 @@ class RAGService:
         if not self.model:
             return "Model not loaded"
         
-        # Build prompt with system message and context
-        system_prompt = """You are an expert code analysis assistant. Your role is to help developers understand codebases by:
-- Explaining code functionality clearly and concisely
-- Identifying patterns, best practices, and potential issues
-- Providing actionable insights and recommendations
-- Answering questions about code structure, dependencies, and implementation details
-
-When analyzing code, be specific, accurate, and helpful."""
+        # Get model configuration for system prompt and generation settings
+        model_config = settings.get_model_config()
+        system_prompt = model_config["system_prompt"]
+        prompt_format = model_config.get("prompt_format", "llama2")
 
         # Add retrieved code context if available
         code_context = ""
         if context:
-            code_context = "\n\nRelevant Code:\n"
+            code_context = "\n\nRelevant Code from Repository:\n"
             for src in context[:3]:  # Top 3 most relevant
                 if isinstance(src, str):
                     # Handle string content directly
                     code_context += f"\n{src}\n"
                 else:
-                    # Handle SourceReference objects
-                    code_context += f"\nFile: {src.file} (score: {src.score})\n"
-                    code_context += f"```\n{src.content}\n```\n"
+                    # Handle SourceReference objects - present more naturally with line info
+                    line_info = ""
+                    if src.line_start and src.line_end:
+                        line_info = f" (lines {src.line_start}-{src.line_end})"
+                    code_context += f"\nFrom {src.file}{line_info}:\n{src.content}\n"
         
-        # Build full prompt with better instructions
-        prompt = f"""<s>[INST] <<SYS>>
+        # Build instructions
+        instructions = """When answering:
+- Speak naturally about the repository, not "provided code snippets"
+- Reference specific files when relevant (e.g., "In src/services/rag_service.py...")
+- Mention line numbers when discussing specific implementations
+- Give direct, clear answers
+- If information is not available, say so clearly"""
+        
+        # Build prompt based on model format
+        if prompt_format == "phi3":
+            # Phi-3 format: <|system|>\n...<|end|>\n<|user|>\n...<|end|>\n<|assistant|>
+            prompt = f"""<|system|>
 {system_prompt}
 
-IMPORTANT: When answering technical questions:
-1. Be precise with specific values, names, and parameters
-2. Quote exact code snippets when available
-3. Distinguish between different files and their purposes
-4. If you're unsure about specific values, say so rather than guessing
-5. Focus on the most relevant information from the source files
+{instructions}<|end|>
+<|user|>
+{code_context}
+
+Question: {query}<|end|>
+<|assistant|>
+"""
+        elif prompt_format == "llama3":
+            # Llama 3 format
+            prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+{system_prompt}
+
+{instructions}<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+{code_context}
+
+Question: {query}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+"""
+        else:
+            # Default Llama 2 / CodeLlama format
+            prompt = f"""<s>[INST] <<SYS>>
+{system_prompt}
+
+{instructions}
 <</SYS>>
 
 {code_context}
 
-User Question: {query} [/INST]
+Question: {query} [/INST]
 
-Based on the provided source code, please provide a detailed and accurate answer. Include specific values, file names, and implementation details when available.
+Answer naturally and conversationally about what you observe in the repository.
 
-Answer:"""
+"""
 
         try:
-            # Generate response using CodeLlama
+            # Generate response using configured model
             response = self.model(
                 prompt,
-                max_tokens=128,  # Further reduced to prevent memory issues
-                temperature=0.7,
-                top_p=0.95,
-                stop=["</s>", "[INST]", "<|endoftext|>", "\n\nUser Question:", "\n\nFile:"],
+                max_tokens=model_config["max_tokens"],
+                temperature=model_config["temperature"],
+                top_p=model_config["top_p"],
+                stop=model_config["stop_tokens"],
                 echo=False,
             )
             
@@ -708,10 +764,10 @@ Answer:"""
             return generated_text
             
         except Exception as e:
-            print(f"Error generating response: {e}")
-            print(f"Error type: {type(e).__name__}")
+            logger.error(f"Error generating response: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
             import traceback
-            print(f"Traceback: {traceback.format_exc()}")
+            logger.debug(f"Traceback: {traceback.format_exc()}")
             return f"Error generating response: {str(e)}"
 
     def _retrieve_relevant_content(self, query: str) -> tuple[List[str], List[SourceReference]]:
@@ -832,6 +888,7 @@ Answer:"""
                         
                         # Take first 500 characters to avoid context window issues
                         content_preview = content[:500]
+                        content_lines = content_preview.count('\n') + 1
                         if len(content) > 500:
                             content_preview += "\n... (truncated)"
                         
@@ -844,16 +901,18 @@ Answer:"""
                             file=file_path,
                             content=content_preview,
                             score=normalized_score,
+                            line_start=1,
+                            line_end=content_lines,
                             type="code" if file_path.endswith(('.py', '.js', '.ts', '.java', '.cpp', '.c', '.h', '.hpp', '.rs', '.go', '.rb', '.php', '.swift', '.kt', '.scala', '.sh', '.bash')) else "doc"
                         ))
                     except Exception as e:
-                        print(f"Error reading file {file_path}: {e}")
+                        logger.debug(f"Error reading file {file_path}: {e}")
                         continue
             
             return retrieved_content, sources
             
         except Exception as e:
-            print(f"Error retrieving content: {e}")
+            logger.error(f"Error retrieving content: {e}")
             return [], []
 
     def _validate_response(self, response: str, context: List[str]) -> str:
@@ -945,7 +1004,7 @@ Answer:"""
             return min(score, 10)  # Cap at 10 points
             
         except Exception as e:
-            print(f"Error calculating content relevance for {file_path}: {e}")
+            logger.debug(f"Error calculating content relevance for {file_path}: {e}")
             return 0
 
     def _fact_check_response(self, response: str, context: List[SourceReference], query: str) -> str:
@@ -1009,7 +1068,7 @@ Answer:"""
             return response
             
         except Exception as e:
-            print(f"Error in fact-checking: {e}")
+            logger.debug(f"Error in fact-checking: {e}")
             return response
 
 

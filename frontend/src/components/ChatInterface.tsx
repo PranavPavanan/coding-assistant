@@ -12,6 +12,8 @@ import { ConversationTabs } from '@/components/ConversationTabs'
 export function ChatInterface() {
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [elapsedMs, setElapsedMs] = useState<number>(0)
+  const elapsedTimer = useRef<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -76,6 +78,13 @@ export function ChatInterface() {
     setInput('')
     setError(null)
     setIsQuerying(true)
+    setElapsedMs(0)
+    if (elapsedTimer.current) {
+      window.clearInterval(elapsedTimer.current)
+    }
+    elapsedTimer.current = window.setInterval(() => {
+      setElapsedMs((v) => v + 1000)
+    }, 1000)
 
     try {
       const response = await apiClient.chatQuery(
@@ -138,6 +147,10 @@ export function ChatInterface() {
       setIsQuerying(false)
     } finally {
       setIsQuerying(false)
+      if (elapsedTimer.current) {
+        window.clearInterval(elapsedTimer.current)
+        elapsedTimer.current = null
+      }
     }
   }
 
@@ -243,8 +256,10 @@ export function ChatInterface() {
 
               {isQuerying && (
                 <div className="flex justify-start">
-                  <div className="max-w-[80%] rounded-lg p-4 bg-muted">
+                  <div className="max-w-[80%] rounded-lg p-4 bg-muted flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Generating response...</span>
+                    <span className="text-xs opacity-70">{Math.floor(elapsedMs / 1000)}s</span>
                   </div>
                 </div>
               )}

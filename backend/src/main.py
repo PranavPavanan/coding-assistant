@@ -1,4 +1,5 @@
 """Main FastAPI application."""
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,36 +9,42 @@ from src.api import chat, health, indexing, repositories, search, websocket
 from src.config import settings
 from src.services.rag_service import get_rag_service
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - runs on startup and shutdown."""
-    # Startup: Initialize RAG service with CodeLlama model
-    print("\n" + "="*60)
-    print("Starting RAG GitHub Assistant...")
-    print("="*60)
+    # Startup: Initialize RAG service
+    logger.info("="*60)
+    logger.info("Starting RAG GitHub Assistant")
+    logger.info("="*60)
     
     rag_service = get_rag_service(
         model_path=str(settings.get_model_path())
     )
     
-    print(f"\nModel path: {settings.get_model_path()}")
+    logger.info(f"Model: {settings.MODEL_NAME}")
+    logger.info(f"Path: {settings.get_model_path()}")
     
     # Try to initialize the model
     if await rag_service.initialize():
-        print("\nSUCCESS: RAG Service initialized successfully!")
-        print("   CodeLlama model is ready for queries.")
+        logger.info("RAG Service initialized successfully - Model ready for queries")
     else:
-        print("\nERROR: RAG Service initialization failed!")
-        print("   Check the error messages above for details.")
-        print("   Server will start but queries will return errors until fixed.")
+        logger.error("RAG Service initialization failed - Check logs for details")
+        logger.warning("Server will start but queries will return errors until fixed")
     
-    print("\n" + "="*60 + "\n")
+    logger.info("="*60)
     
     yield
     
     # Shutdown: Cleanup if needed
-    print("\nShutting down RAG GitHub Assistant...")
+    logger.info("Shutting down RAG GitHub Assistant")
 
 
 app = FastAPI(

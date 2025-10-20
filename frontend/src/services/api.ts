@@ -19,7 +19,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 30000, // 30 seconds
+      timeout: 120000, // increase from 30000
     })
     console.log('🔍 DEBUG: Axios client created with baseURL:', this.client.defaults.baseURL)
 

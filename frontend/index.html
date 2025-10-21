@@ -1,13 +1,331 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG GitHub Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i data-lucide="github"></i>
+                        <i data-lucide="sparkles"></i>
+                    </div>
+                    <div class="logo-text">
+                        <h1>RAG GitHub Assistant</h1>
+                        <p>AI-powered code exploration and intelligent Q&A</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-navigation">
+        <div class="container">
+            <div class="tabs">
+                <button class="tab active" data-tab="search">
+                    <i data-lucide="search"></i>
+                    <div class="tab-content">
+                        <div class="tab-label">Search</div>
+                        <div class="tab-description">Find repositories</div>
+                    </div>
+                </button>
+                <button class="tab" data-tab="indexing">
+                    <i data-lucide="database"></i>
+                    <div class="tab-content">
+                        <div class="tab-label">Index</div>
+                        <div class="tab-description">Index repository</div>
+                    </div>
+                </button>
+                <button class="tab" data-tab="chat" disabled>
+                    <i data-lucide="message-square"></i>
+                    <div class="tab-content">
+                        <div class="tab-label">Query</div>
+                        <div class="tab-description">Ask questions</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Search Tab -->
+            <div id="search-tab" class="tab-content active">
+                <!-- Index Status Banner -->
+                <div id="index-status-banner" class="index-status-banner hidden">
+                    <div class="banner-content">
+                        <i data-lucide="check-circle"></i>
+                        <div class="banner-text">
+                            <strong>Repository Ready!</strong>
+                            <span id="banner-repo-name"></span> is indexed and ready for AI queries.
+                        </div>
+                        <button id="go-to-chat" class="btn btn-primary btn-sm">Start Querying</button>
+                    </div>
+                </div>
+
+                <div class="search-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Search GitHub Repositories</h2>
+                            <p>Find a repository to analyze and query with AI</p>
+                        </div>
+                        <div class="card-body">
+                            <form id="search-form" class="search-form">
+                                <div class="search-input-group">
+                                    <i data-lucide="search" class="search-icon"></i>
+                                    <input 
+                                        type="text" 
+                                        id="search-query" 
+                                        placeholder="Search repositories (e.g., 'react', 'typescript orm', 'machine learning')"
+                                        class="search-input"
+                                    >
+                                </div>
+                                <button type="submit" class="btn btn-primary" id="search-btn">
+                                    <span class="btn-text">Search</span>
+                                    <i data-lucide="loader-2" class="btn-spinner hidden"></i>
+                                </button>
+                            </form>
+                            <div id="search-error" class="error-message hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Repository -->
+                    <div id="selected-repo" class="card selected-repo hidden">
+                        <div class="card-header">
+                            <h3>Selected Repository</h3>
+                            <button class="btn btn-ghost btn-sm" id="clear-selection">Clear</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="repo-info">
+                                <div class="repo-header">
+                                    <h4 id="repo-name"></h4>
+                                    <a id="repo-link" href="#" target="_blank" class="repo-link">
+                                        <i data-lucide="external-link"></i>
+                                    </a>
+                                </div>
+                                <p id="repo-description" class="repo-description"></p>
+                                <div class="repo-stats">
+                                    <span id="repo-language" class="repo-stat hidden">
+                                        <span class="language-dot"></span>
+                                        <span class="language-text"></span>
+                                    </span>
+                                    <span class="repo-stat">
+                                        <i data-lucide="star"></i>
+                                        <span id="repo-stars"></span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search Results -->
+                    <div id="search-results" class="search-results hidden">
+                        <h3 id="results-title"></h3>
+                        <div id="results-list" class="results-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Indexing Tab -->
+            <div id="indexing-tab" class="tab-content">
+                <div class="indexing-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Repository Indexing</h2>
+                            <p>Index a repository to enable AI-powered code queries</p>
+                        </div>
+                        <div class="card-body">
+                            <div id="selected-repo-display" class="selected-repo-display hidden">
+                                <p class="repo-label">Selected Repository:</p>
+                                <p id="selected-repo-name" class="repo-name"></p>
+                            </div>
+                            <div id="url-input-group" class="url-input-group">
+                                <label class="input-label">Repository URL</label>
+                                <input 
+                                    type="text" 
+                                    id="repo-url" 
+                                    placeholder="https://github.com/owner/repo"
+                                    class="input"
+                                >
+                            </div>
+                            <button id="start-indexing" class="btn btn-primary btn-full">
+                                <i data-lucide="play"></i>
+                                <span class="btn-text">Start Indexing</span>
+                                <i data-lucide="loader-2" class="btn-spinner hidden"></i>
+                            </button>
+                            <div id="indexing-error" class="error-message hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Indexing Progress -->
+                    <div id="indexing-progress" class="card hidden">
+                        <div class="card-header">
+                            <div class="progress-header">
+                                <div class="progress-title">
+                                    <i id="progress-icon" data-lucide="alert-circle"></i>
+                                    <span>Indexing Status</span>
+                                </div>
+                                <span id="progress-status" class="progress-status">pending</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress-section">
+                                <div class="progress-info">
+                                    <span>Progress</span>
+                                    <span id="progress-percentage">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div id="progress-fill" class="progress-fill"></div>
+                                </div>
+                            </div>
+                            <div class="progress-stats">
+                                <div class="stat">
+                                    <p class="stat-label">Files Processed</p>
+                                    <p id="files-processed" class="stat-value">0</p>
+                                </div>
+                                <div class="stat">
+                                    <p class="stat-label">Total Files</p>
+                                    <p id="total-files" class="stat-value">0</p>
+                                </div>
+                            </div>
+                            <div id="progress-error" class="error-message hidden"></div>
+                            <button id="start-querying" class="btn btn-primary btn-full hidden">Start Querying</button>
+                        </div>
+                    </div>
+
+                    <!-- Current Index -->
+                    <div id="current-index" class="card hidden">
+                        <div class="card-header">
+                            <h3>Current Index</h3>
+                            <button id="clear-index" class="btn btn-destructive btn-sm">Clear Index</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="index-stats">
+                                <div class="stat">
+                                    <p class="stat-label">Repository</p>
+                                    <p id="index-repo-name" class="stat-value">Unknown</p>
+                                </div>
+                                <div class="stat">
+                                    <p class="stat-label">Files Indexed</p>
+                                    <p id="index-file-count" class="stat-value">0</p>
+                                </div>
+                                <div class="stat">
+                                    <p class="stat-label">Vectors</p>
+                                    <p id="index-vector-count" class="stat-value">0</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Tab -->
+            <div id="chat-tab" class="tab-content">
+                <div class="chat-container">
+                    <!-- Conversation Tabs -->
+                    <div id="conversation-tabs" class="conversation-tabs hidden">
+                        <div class="tabs-list" id="tabs-list"></div>
+                        <button id="new-chat-btn" class="btn btn-outline btn-sm">
+                            <i data-lucide="plus"></i>
+                            <span class="btn-text">New Chat</span>
+                        </button>
+                    </div>
+
+                    <!-- Chat Interface -->
+                    <div class="chat-interface">
+                        <div class="chat-header">
+                            <h2>AI Code Assistant</h2>
+                            <div class="chat-actions">
+                                <button id="new-chat-header" class="btn btn-outline btn-sm">
+                                    <i data-lucide="plus"></i>
+                                    New Chat
+                                </button>
+                                <button id="clear-chat" class="btn btn-outline btn-sm" disabled>
+                                    Clear Chat
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Chat Messages -->
+                        <div class="chat-messages" id="chat-messages">
+                            <div id="no-index-message" class="no-index-message">
+                                <p>No repository indexed yet</p>
+                                <p>Please search for and index a repository to start querying</p>
+                            </div>
+                            <div id="welcome-message" class="welcome-message hidden">
+                                <p class="welcome-title">Ask me anything about the code!</p>
+                                <p class="welcome-examples">
+                                    Examples: "How does authentication work?", "Explain the main function", "Where is the database configured?"
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Chat Error -->
+                        <div id="chat-error" class="error-message hidden"></div>
+
+                        <!-- Repository Info -->
+                        <div id="repo-info-bar" class="repo-info-bar hidden">
+                            <div class="repo-info-content">
+                                <i data-lucide="code"></i>
+                                <span>What do you want to know about</span>
+                                <span id="chat-repo-name" class="repo-name"></span>
+                                <span>?</span>
+                            </div>
+                        </div>
+
+                        <!-- Chat Input -->
+                        <form id="chat-form" class="chat-form">
+                            <div class="chat-input-group">
+                                <input 
+                                    type="text" 
+                                    id="chat-input" 
+                                    placeholder="Ask a question about the code..."
+                                    class="chat-input"
+                                    disabled
+                                >
+                                <button type="submit" class="btn btn-primary" id="chat-submit" disabled>
+                                    <i data-lucide="send" class="btn-icon"></i>
+                                    <i data-lucide="loader-2" class="btn-spinner hidden"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Index Stats -->
+                    <div id="index-stats-bar" class="index-stats-bar hidden">
+                        <div class="stats-content">
+                            <i data-lucide="code"></i>
+                            <span>Querying:</span>
+                            <span id="stats-repo-name" class="repo-name"></span>
+                            <span class="stats-count" id="stats-file-count">0 files indexed</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>Built with ❤️ using HTML, CSS, JavaScript, FastAPI, and CodeLlama</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
+    <script src="app.js"></script>
+</body>
 </html>

@@ -1,73 +1,89 @@
-# React + TypeScript + Vite
+# RAG GitHub Assistant - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A pure HTML, CSS, and JavaScript frontend for the RAG GitHub Assistant application.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Repository Search**: Search and select GitHub repositories
+- **Repository Indexing**: Index repositories for AI-powered queries
+- **AI Chat Interface**: Ask questions about indexed code with context awareness
+- **Conversation Management**: Multiple chat conversations with tabbed interface
+- **Real-time Progress**: Live indexing progress updates
+- **Responsive Design**: Works on desktop and mobile devices
+- **Dark Mode Support**: Automatic dark mode based on system preference
 
-## React Compiler
+## Quick Start
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Option 1: Python HTTP Server (Recommended)
+```bash
+cd frontend
+python -m http.server 5173
+```
+Open http://localhost:5173 in your browser.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Option 2: Node.js HTTP Server
+```bash
+cd frontend
+npx http-server -p 5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Option 3: Any Static File Server
+Serve the `frontend/` directory with any static file server.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## File Structure
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+frontend/
+├── index.html          # Main HTML file
+├── styles.css          # All CSS styles
+├── app.js             # JavaScript application logic
+├── package.json       # Package configuration
+└── README.md          # This file
+```
+
+## API Integration
+
+The frontend communicates with the backend API at `/api` endpoints:
+
+- `GET /api/health` - Health check
+- `POST /api/search/repositories` - Search GitHub repositories
+- `POST /api/index/start` - Start repository indexing
+- `GET /api/index/status/{task_id}` - Get indexing status
+- `GET /api/index/stats` - Get index statistics
+- `DELETE /api/index/current` - Clear current index
+- `POST /api/chat/query` - Send chat query
+
+## Browser Support
+
+- Chrome 80+
+- Firefox 75+
+- Safari 13+
+- Edge 80+
+
+## Development
+
+No build process required! Just edit the files and refresh your browser.
+
+### Key Components
+
+- **RAGApp Class**: Main application controller
+- **State Management**: Centralized state in `this.state`
+- **API Client**: Built-in fetch-based API client
+- **UI Updates**: Direct DOM manipulation for performance
+
+### Adding Features
+
+1. Add HTML structure to `index.html`
+2. Add styles to `styles.css`
+3. Add functionality to `app.js` in the `RAGApp` class
+
+## Production Deployment
+
+1. Copy all files to your web server
+2. Ensure the backend API is accessible at `/api`
+3. Configure CORS if needed
+4. Set up HTTPS for production use
+
+## License
+
+MIT License - see LICENSE file for details.

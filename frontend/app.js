@@ -39,7 +39,9 @@ class RAGApp {
         this.bindEvents();
         this.loadIndexStats();
         this.initializeLucideIcons();
-        this.updateTabStates();
+        
+        // Ensure we start with the search tab active
+        this.switchTab('search');
         
         // Test: Make sure tabs are visible
         setTimeout(() => {
@@ -49,7 +51,19 @@ class RAGApp {
                 console.log(`Tab ${index}:`, {
                     visible: tab.offsetWidth > 0,
                     text: tab.textContent.trim(),
-                    classes: tab.className
+                    classes: tab.className,
+                    dataset: tab.dataset.tab
+                });
+            });
+            
+            // Check tab content areas
+            const tabContents = ['search-tab', 'indexing-tab', 'chat-tab'];
+            tabContents.forEach(id => {
+                const element = document.getElementById(id);
+                console.log(`Tab content ${id}:`, {
+                    exists: !!element,
+                    hasActive: element?.classList.contains('active'),
+                    display: element ? getComputedStyle(element).display : 'not found'
                 });
             });
         }, 1000);
@@ -60,8 +74,11 @@ class RAGApp {
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 const tabId = e.currentTarget.dataset.tab;
+                console.log('Tab clicked:', tabId, 'disabled:', e.currentTarget.disabled);
                 if (!e.currentTarget.disabled) {
                     this.switchTab(tabId);
+                } else {
+                    console.log('Tab is disabled, not switching');
                 }
             });
         });
@@ -198,21 +215,32 @@ class RAGApp {
     switchTab(tabId) {
         console.log('Switching to tab:', tabId);
         
-        // Update active tab
+        // Update active tab buttons
         document.querySelectorAll('.tab').forEach(tab => {
             tab.classList.remove('active');
             if (tab.dataset.tab === tabId) {
                 tab.classList.add('active');
+                console.log('Activated tab button:', tabId);
             }
         });
 
-        // Update tab content
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.remove('active');
+        // Hide all tab content areas
+        const tabContentAreas = ['search-tab', 'indexing-tab', 'chat-tab'];
+        tabContentAreas.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.classList.remove('active');
+                console.log('Hidden tab content:', id);
+            }
         });
+
+        // Show the target tab content
         const targetTabContent = document.getElementById(`${tabId}-tab`);
         if (targetTabContent) {
             targetTabContent.classList.add('active');
+            console.log('Showing tab content:', `${tabId}-tab`);
+        } else {
+            console.error('Target tab content not found:', `${tabId}-tab`);
         }
 
         this.state.activeTab = tabId;

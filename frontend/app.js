@@ -5,7 +5,7 @@
 
 class RAGApp {
     constructor() {
-        this.apiBaseUrl = '/api';
+        this.apiBaseUrl = 'http://localhost:8000/api';
         this.state = {
             // Repository state
             selectedRepository: null,
@@ -35,38 +35,10 @@ class RAGApp {
     }
 
     init() {
-        console.log('RAG App initializing...');
         this.bindEvents();
         this.loadIndexStats();
         this.initializeLucideIcons();
-        
-        // Ensure we start with the search tab active
         this.switchTab('search');
-        
-        // Test: Make sure tabs are visible
-        setTimeout(() => {
-            const tabs = document.querySelectorAll('.tab');
-            console.log('Found tabs:', tabs.length);
-            tabs.forEach((tab, index) => {
-                console.log(`Tab ${index}:`, {
-                    visible: tab.offsetWidth > 0,
-                    text: tab.textContent.trim(),
-                    classes: tab.className,
-                    dataset: tab.dataset.tab
-                });
-            });
-            
-            // Check tab content areas
-            const tabContents = ['search-tab', 'indexing-tab', 'chat-tab'];
-            tabContents.forEach(id => {
-                const element = document.getElementById(id);
-                console.log(`Tab content ${id}:`, {
-                    exists: !!element,
-                    hasActive: element?.classList.contains('active'),
-                    display: element ? getComputedStyle(element).display : 'not found'
-                });
-            });
-        }, 1000);
     }
 
     bindEvents() {
@@ -74,11 +46,8 @@ class RAGApp {
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 const tabId = e.currentTarget.dataset.tab;
-                console.log('Tab clicked:', tabId, 'disabled:', e.currentTarget.disabled);
                 if (!e.currentTarget.disabled) {
                     this.switchTab(tabId);
-                } else {
-                    console.log('Tab is disabled, not switching');
                 }
             });
         });
@@ -128,11 +97,6 @@ class RAGApp {
             this.clearCurrentChat();
         });
 
-        // Go to chat from banner
-        document.getElementById('go-to-chat')?.addEventListener('click', () => {
-            console.log('Banner button clicked - switching to chat');
-            this.switchTab('chat');
-        });
 
         // Chat input enter key
         document.getElementById('chat-input').addEventListener('keydown', (e) => {
@@ -213,14 +177,11 @@ class RAGApp {
 
     // UI Methods
     switchTab(tabId) {
-        console.log('Switching to tab:', tabId);
-        
         // Update active tab buttons
         document.querySelectorAll('.tab').forEach(tab => {
             tab.classList.remove('active');
             if (tab.dataset.tab === tabId) {
                 tab.classList.add('active');
-                console.log('Activated tab button:', tabId);
             }
         });
 
@@ -230,7 +191,6 @@ class RAGApp {
             const element = document.getElementById(id);
             if (element) {
                 element.classList.remove('active');
-                console.log('Hidden tab content:', id);
             }
         });
 
@@ -238,14 +198,9 @@ class RAGApp {
         const targetTabContent = document.getElementById(`${tabId}-tab`);
         if (targetTabContent) {
             targetTabContent.classList.add('active');
-            console.log('Showing tab content:', `${tabId}-tab`);
-        } else {
-            console.error('Target tab content not found:', `${tabId}-tab`);
         }
 
         this.state.activeTab = tabId;
-
-        // Update tab states and banner visibility
         this.updateTabStates();
         
         // If switching to indexing tab, update display
@@ -536,24 +491,13 @@ class RAGApp {
 
     async loadIndexStats() {
         try {
-            console.log('Loading index stats from API...');
             const stats = await this.getIndexStats();
-            console.log('Index stats loaded:', stats);
-            
             this.state.indexStats = stats;
-            
-            // Show notification if repository is already indexed
-            if (stats?.is_indexed && stats.repository_name) {
-                console.log(`✓ Repository "${stats.repository_name}" is already indexed!`);
-                console.log(`  Files: ${stats.file_count}, Vectors: ${stats.vector_count}`);
-            }
-            
             this.updateIndexDisplay();
             this.updateChatInterface();
             this.updateTabStates();
         } catch (error) {
-            console.error('Failed to load index stats:', error);
-            // Even on error, update UI to show default state
+            // Backend not available - disable chat tab
             this.state.indexStats = null;
             this.updateTabStates();
         }
@@ -562,17 +506,14 @@ class RAGApp {
     updateTabStates() {
         const chatTab = document.querySelector('[data-tab="chat"]');
         const indexingTab = document.querySelector('[data-tab="indexing"]');
-        const banner = document.getElementById('index-status-banner');
-        const bannerRepoName = document.getElementById('banner-repo-name');
         
-        console.log('Updating tab states:', {
-            hasIndexStats: !!this.state.indexStats,
-            isIndexed: this.state.indexStats?.is_indexed,
-            repoName: this.state.indexStats?.repository_name,
-            activeTab: this.state.activeTab
-        });
+        // Check if repository is indexed - try multiple possible indicators
+        const isIndexed = this.state.indexStats?.is_indexed || 
+                         (this.state.indexStats?.file_count > 0) ||
+                         (this.state.indexStats?.vector_count > 0) ||
+                         (this.state.indexStats?.repository_name && this.state.indexStats?.file_count >= 0);
         
-        if (this.state.indexStats?.is_indexed) {
+        if (isIndexed) {
             // Enable chat tab if repository is indexed
             if (chatTab) {
                 chatTab.disabled = false;
@@ -582,16 +523,6 @@ class RAGApp {
             // Show indexing tab as completed
             if (indexingTab) {
                 indexingTab.classList.add('indexed');
-            }
-            
-            // Always show banner on search tab when indexed
-            if (banner && this.state.activeTab === 'search') {
-                const repoName = this.state.indexStats.repository_name || 'Unknown Repository';
-                bannerRepoName.textContent = repoName;
-                banner.classList.remove('hidden');
-                console.log('Showing index banner for:', repoName);
-            } else if (banner) {
-                banner.classList.add('hidden');
             }
         } else {
             // Disable chat tab if no repository is indexed
@@ -603,11 +534,6 @@ class RAGApp {
             if (indexingTab) {
                 indexingTab.classList.remove('indexed');
             }
-            
-            // Hide banner
-            if (banner) {
-                banner.classList.add('hidden');
-            }
         }
     }
 
@@ -618,7 +544,13 @@ class RAGApp {
         const urlInputGroupElement = document.getElementById('url-input-group');
         const startIndexingBtn = document.getElementById('start-indexing');
 
-        if (this.state.indexStats?.is_indexed) {
+        // Check if repository is indexed using the same logic as updateTabStates
+        const isIndexed = this.state.indexStats?.is_indexed || 
+                         (this.state.indexStats?.file_count > 0) ||
+                         (this.state.indexStats?.vector_count > 0) ||
+                         (this.state.indexStats?.repository_name && this.state.indexStats?.file_count >= 0);
+
+        if (isIndexed) {
             // Show current index information
             currentIndexElement.classList.remove('hidden');
             document.getElementById('index-repo-name').textContent = this.state.indexStats.repository_name || 'Unknown';

@@ -107,7 +107,7 @@ body {
     position: sticky;
     top: 80px;
     z-index: 40;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    box-shadow: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -119,13 +119,14 @@ body {
 
 .tabs {
     display: flex !important;
-    gap: 0.5rem;
+    gap: 0.25rem;
     background: transparent;
-    padding: 1rem 0;
+    padding: 0.5rem 0;
     margin: 0;
     border: none;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
+    position: relative;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -137,21 +138,23 @@ body {
 .tab {
     display: flex !important;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1rem 2rem;
-    border: 2px solid transparent;
-    border-radius: 0.75rem;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 0.5rem;
     background: transparent;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     text-align: center;
     color: #6b7280;
     font-size: 0.875rem;
     font-weight: 500;
-    min-width: 140px;
+    min-width: auto;
     justify-content: center;
     position: relative;
     overflow: hidden;
+    margin: 0;
+    white-space: nowrap;
 }
 
 .tab::before {
@@ -170,18 +173,16 @@ body {
 @media (prefers-color-scheme: dark) {
     .tab {
         color: #9ca3af;
-    }
-    
-    .tab::before {
-        background: linear-gradient(135deg, #374151, #4b5563);
+        background: transparent;
+        border: none;
     }
 }
 
 .tab:hover:not(:disabled) {
-    color: #374151;
-    border-color: #d1d5db;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    color: #1f2937;
+    background: #f3f4f6;
+    transform: none;
+    box-shadow: none;
 }
 
 .tab:hover:not(:disabled)::before {
@@ -191,8 +192,17 @@ body {
 @media (prefers-color-scheme: dark) {
     .tab:hover:not(:disabled) {
         color: #f9fafb;
-        border-color: #6b7280;
+        background: #374151;
     }
+}
+
+.tab:focus {
+    outline: 2px solid #7c3aed;
+    outline-offset: 2px;
+}
+
+.tab:focus:not(:focus-visible) {
+    outline: none;
 }
 
 .tab:disabled {
@@ -203,17 +213,19 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-    .tab:disabled {
-        color: #6b7280;
+    .tab:focus,
+    .tab:focus-visible {
+        outline-color: #8b5cf6;
     }
 }
 
 .tab.active {
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6);
-    color: white;
-    border-color: #7c3aed;
-    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
-    transform: translateY(-2px);
+    background: #f3f4f6;
+    color: #1f2937;
+    font-weight: 600;
+    box-shadow: none;
+    transform: none;
+    z-index: 1;
 }
 
 .tab.active::before {
@@ -221,13 +233,13 @@ body {
 }
 
 .tab.active .tab-label {
-    color: white;
+    color: #1f2937;
     font-weight: 600;
 }
 
 .tab.active .tab-description {
-    color: white;
-    opacity: 0.9;
+    color: #6b7280;
+    opacity: 0.8;
 }
 
 .tab.indexed {
@@ -288,8 +300,21 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-    .tab:hover:not(:disabled) {
+    .main {
+        background: #1f2937;
+    }
+    
+    .tab.active {
+        background: #374151;
         color: #f9fafb;
+    }
+    
+    .tab.active .tab-label {
+        color: #f9fafb;
+    }
+    
+    .tab.active .tab-description {
+        color: #d1d5db;
     }
 }
 
@@ -298,60 +323,9 @@ body {
     flex: 1;
     padding: 2rem 0;
     min-height: calc(100vh - 200px);
+    background: white;
 }
 
-/* Index Status Banner */
-.index-status-banner {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    padding: 1.5rem 2rem;
-    border-radius: 1rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.banner-content {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-}
-
-.banner-content i {
-    width: 2rem;
-    height: 2rem;
-    flex-shrink: 0;
-}
-
-.banner-text {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.banner-text strong {
-    font-weight: 700;
-    font-size: 1.125rem;
-}
-
-.banner-text span {
-    font-size: 0.875rem;
-    opacity: 0.95;
-    font-weight: 500;
-}
-
-@media (max-width: 768px) {
-    .banner-content {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
-    }
-    
-    .banner-text {
-        width: 100%;
-    }
-}
 
 /* Main tab content areas */
 #search-tab,
@@ -1376,15 +1350,15 @@ body {
     .tabs {
         flex-direction: row;
         overflow-x: auto;
-        gap: 0.5rem;
-        padding: 0.75rem 0;
+        gap: 0.25rem;
+        padding: 0.5rem 0;
         margin: 0;
         justify-content: flex-start;
     }
     
     .tab {
-        padding: 0.75rem 1.25rem;
-        min-width: 120px;
+        padding: 0.625rem 0.875rem;
+        min-width: auto;
         flex-shrink: 0;
     }
     
@@ -1504,3 +1478,4 @@ body {
         background: #9ca3af;
     }
 }
+

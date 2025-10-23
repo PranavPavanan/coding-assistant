@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>RAG GitHub Assistant</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -63,18 +66,6 @@
         <div class="container">
             <!-- Search Tab -->
             <div id="search-tab" class="tab-content active">
-                <!-- Index Status Banner -->
-                <div id="index-status-banner" class="index-status-banner hidden">
-                    <div class="banner-content">
-                        <i data-lucide="check-circle"></i>
-                        <div class="banner-text">
-                            <strong>Repository Ready!</strong>
-                            <span id="banner-repo-name"></span> is indexed and ready for AI queries.
-                        </div>
-                        <button id="go-to-chat" class="btn btn-primary btn-sm">Start Querying</button>
-                    </div>
-                </div>
-
                 <div class="search-section">
                     <div class="card">
                         <div class="card-header">
@@ -326,6 +317,6 @@
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
 </body>
 </html>

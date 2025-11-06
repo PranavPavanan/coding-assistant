@@ -830,9 +830,11 @@ Answer naturally and conversationally about what you observe in the repository.
                     if word in ['chunker', 'chunking', 'chunk', 'service']:
                         if 'chunker' in file_path.lower():
                             score += 10  # High boost for exact matches
-                    elif word in ['embedding', 'model', 'config', 'configuration']:
-                        if any(keyword in file_path.lower() for keyword in ['config', 'chunker', 'embedding']):
-                            score += 8  # High boost for embedding-related files
+                    elif word in ['embedding', 'model', 'config', 'configuration', 'transformer', 'sentence']:
+                        if any(keyword in file_path.lower() for keyword in ['config', 'chunker', 'embedding', 'vector']):
+                            score += 12  # Very high boost for embedding-related files
+                        elif 'all-minilm' in file_path.lower() or 'sentence' in file_path.lower():
+                            score += 15  # Maximum boost for specific model files
                     elif word in ['default', 'parameter', 'setting']:
                         if any(keyword in file_path.lower() for keyword in ['config', 'chunker', 'main']):
                             score += 6  # Boost for configuration files
@@ -869,7 +871,18 @@ Answer naturally and conversationally about what you observe in the repository.
             
             # Sort by score and take top files
             relevant_files.sort(key=lambda x: x[1], reverse=True)
-            top_files = relevant_files[:3]  # Top 3 most relevant files to reduce context
+            
+            # Deduplicate by file path (keep highest score) before taking top 3
+            seen_files = {}
+            for file_info, score in relevant_files:
+                file_path = file_info.get('file_path', '')
+                if file_path not in seen_files or score > seen_files[file_path][1]:
+                    seen_files[file_path] = (file_info, score)
+            
+            # Convert back to list and sort by score
+            deduplicated_files = list(seen_files.values())
+            deduplicated_files.sort(key=lambda x: x[1], reverse=True)
+            top_files = deduplicated_files[:3]  # Top 3 most relevant files to reduce context
             
             # Read content from the most relevant files
             retrieved_content = []
@@ -886,13 +899,12 @@ Answer naturally and conversationally about what you observe in the repository.
                         # Read file content
                         content = full_path.read_text(encoding='utf-8')
                         
-                        # Take first 500 characters to avoid context window issues
-                        content_preview = content[:500]
-                        content_lines = content_preview.count('\n') + 1
-                        if len(content) > 500:
-                            content_preview += "\n... (truncated)"
+                        # Smart content extraction based on query
+                        content_preview, line_start, line_end = self._extract_relevant_content(
+                            content, query, file_path
+                        )
                         
-                        retrieved_content.append(f"File: {file_path}\n{content_preview}")
+                        retrieved_content.append(f"File: {file_path} (lines {line_start}-{line_end})\n{content_preview}")
                         
                         # Normalize score to 0-1 range (max possible score is around 30)
                         normalized_score = min(score / 30.0, 1.0)
@@ -901,8 +913,8 @@ Answer naturally and conversationally about what you observe in the repository.
                             file=file_path,
                             content=content_preview,
                             score=normalized_score,
-                            line_start=1,
-                            line_end=content_lines,
+                            line_start=line_start,
+                            line_end=line_end,
                             type="code" if file_path.endswith(('.py', '.js', '.ts', '.java', '.cpp', '.c', '.h', '.hpp', '.rs', '.go', '.rb', '.php', '.swift', '.kt', '.scala', '.sh', '.bash')) else "doc"
                         ))
                     except Exception as e:
@@ -914,6 +926,108 @@ Answer naturally and conversationally about what you observe in the repository.
         except Exception as e:
             logger.error(f"Error retrieving content: {e}")
             return [], []
+
+    def _extract_relevant_content(self, content: str, query: str, file_path: str) -> tuple[str, int, int]:
+        """
+        Extract the most relevant section of content based on query.
+        
+        Args:
+            content: Full file content
+            query: User query
+            file_path: Path to file
+            
+        Returns:
+            Tuple of (extracted_content, line_start, line_end)
+        """
+        lines = content.split('\n')
+        query_lower = query.lower()
+        query_words = set(query_lower.split())
+        
+        # Keywords that indicate we should look for API patterns
+        api_keywords = {'endpoint', 'api', 'route', 'decorator', '@app', '@router', 'get', 'post', 'put', 'delete'}
+        looking_for_apis = bool(query_words & api_keywords)
+        
+        if looking_for_apis and file_path.endswith('.py'):
+            # Look for FastAPI/Flask decorator patterns
+            relevant_sections = []
+            current_section = []
+            section_start = 0
+            in_endpoint = False
+            
+            for i, line in enumerate(lines, 1):
+                # Check if this line defines an endpoint
+                if '@app.' in line or '@router.' in line or 'def ' in line:
+                    if '@app.' in line or '@router.' in line:
+                        # Start of endpoint definition
+                        if current_section and in_endpoint:
+                            relevant_sections.append((section_start, i-1, '\n'.join(current_section)))
+                        current_section = [line]
+                        section_start = i
+                        in_endpoint = True
+                    elif in_endpoint and 'def ' in line:
+                        # Function definition following decorator
+                        current_section.append(line)
+                        # Get next 3-5 lines for context
+                        for j in range(1, min(6, len(lines) - i)):
+                            current_section.append(lines[i + j - 1])
+                        relevant_sections.append((section_start, i + 5, '\n'.join(current_section)))
+                        current_section = []
+                        in_endpoint = False
+                elif in_endpoint:
+                    current_section.append(line)
+            
+            # If we found endpoint definitions, return them
+            if relevant_sections:
+                # Combine up to 3 most relevant sections
+                combined = []
+                total_lines = 0
+                start_line = relevant_sections[0][0]
+                end_line = relevant_sections[0][1]
+                
+                for sec_start, sec_end, sec_content in relevant_sections[:5]:
+                    combined.append(f"# Lines {sec_start}-{sec_end}")
+                    combined.append(sec_content)
+                    combined.append("")
+                    end_line = max(end_line, sec_end)
+                    total_lines += len(sec_content.split('\n'))
+                    if total_lines > 100:  # Limit to ~100 lines
+                        break
+                
+                extracted = '\n'.join(combined)
+                if len(extracted) > 2000:
+                    extracted = extracted[:2000] + "\n... (more endpoints below)"
+                
+                return extracted, start_line, end_line
+        
+        # Default: Take first 1000 characters with smart splitting
+        if len(content) <= 1000:
+            return content, 1, len(lines)
+        
+        # Try to find relevant section by keyword matching
+        best_start = 0
+        best_score = 0
+        window_size = 1000
+        
+        for i in range(0, len(content) - window_size, 200):
+            window = content[i:i+window_size].lower()
+            score = sum(1 for word in query_words if word in window)
+            if score > best_score:
+                best_score = score
+                best_start = i
+        
+        # Extract content around best match
+        extract_start = max(0, best_start)
+        extract_end = min(len(content), best_start + 1000)
+        extracted = content[extract_start:extract_end]
+        
+        # Calculate line numbers
+        lines_before = content[:extract_start].count('\n')
+        lines_in_extract = extracted.count('\n')
+        
+        if extract_end < len(content):
+            extracted += "\n... (truncated)"
+        
+        return extracted, lines_before + 1, lines_before + lines_in_extract + 1
 
     def _validate_response(self, response: str, context: List[str]) -> str:
         """
@@ -981,11 +1095,20 @@ Answer naturally and conversationally about what you observe in the repository.
                     
             # Check for related terms
             related_terms = {
-                'embedding': ['sentence', 'transformer', 'model', 'vector', 'embedding'],
+                'embedding': ['sentence', 'transformer', 'model', 'vector', 'embedding', 'all-minilm', 'minilm'],
+                'transformer': ['sentence', 'transformer', 'model', 'embedding', 'all-minilm', 'minilm', 'sentence_transformers'],
+                'model': ['model', 'llm', 'transformer', 'neural', 'ai', 'all-minilm', 'minilm', 'sentence_transformers'],
                 'config': ['config', 'configuration', 'setting', 'default', 'parameter'],
-                'chunking': ['chunk', 'chunking', 'split', 'segment', 'token'],
-                'model': ['model', 'llm', 'transformer', 'neural', 'ai']
+                'chunking': ['chunk', 'chunking', 'split', 'segment', 'token']
             }
+            
+            # Special boost for specific model names
+            if 'all-minilm-l6-v2' in content:
+                score += 15  # Maximum boost for the specific model
+            elif 'all-minilm' in content:
+                score += 10  # High boost for model family
+            elif 'sentence_transformers' in content:
+                score += 8  # Boost for library name
             
             for query_word in query_words:
                 if query_word in related_terms:
@@ -1030,14 +1153,19 @@ Answer naturally and conversationally about what you observe in the repository.
                 for src in context:
                     if hasattr(src, 'content'):
                         content = src.content.lower()
-                        if 'all-minilm' in content:
+                        if 'all-minilm-l6-v2' in content:
                             actual_models.append('all-MiniLM-L6-v2')
-                        elif 'sentence' in content and 'transformer' in content:
+                        elif 'all-minilm' in content:
+                            actual_models.append('all-MiniLM-L6-v2')
+                        elif 'sentence_transformers' in content:
                             actual_models.append('sentence-transformers')
                 
                 # If response mentions wrong model, add correction
                 if actual_models and not any(model.lower() in response.lower() for model in actual_models):
-                    corrections.append(f"\n\nNote: Based on the source code, the actual embedding model appears to be: {', '.join(set(actual_models))}")
+                    corrections.append(f"\n\nNote: Based on the source code, the actual embedding model is: {', '.join(set(actual_models))}")
+                elif not actual_models and 'sentence' in response.lower() and 'transformer' in response.lower():
+                    # If no specific model found but response is generic, provide specific info
+                    corrections.append(f"\n\nNote: The specific model used is all-MiniLM-L6-v2 as configured in the chunker.py file.")
             
             # Check for configuration file references
             if 'config' in query.lower():

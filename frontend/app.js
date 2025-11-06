@@ -605,9 +605,23 @@ class RAGApp {
         if (this.state.indexStats?.is_indexed) {
             noIndexMessage.classList.add('hidden');
             welcomeMessage.classList.remove('hidden');
-            chatInput.disabled = false;
+            chatInput.disabled = this.state.isQuerying;
             chatInput.placeholder = `Ask a question about ${this.state.indexStats.repository_name || 'the code'}...`;
-            chatSubmit.disabled = false;
+            chatSubmit.disabled = this.state.isQuerying;
+            
+            // Update send button loading state
+            const sendIcon = chatSubmit.querySelector('[data-lucide="send"]');
+            const spinnerIcon = chatSubmit.querySelector('[data-lucide="loader-2"]');
+            
+            if (this.state.isQuerying) {
+                sendIcon.classList.add('hidden');
+                spinnerIcon.classList.remove('hidden');
+                chatSubmit.title = 'AI is processing your query...';
+            } else {
+                sendIcon.classList.remove('hidden');
+                spinnerIcon.classList.add('hidden');
+                chatSubmit.title = 'Send message';
+            }
             
             if (this.state.messages.length > 0) {
                 clearChatBtn.disabled = false;
@@ -660,6 +674,8 @@ class RAGApp {
         this.hideError('chat-error');
         this.state.isQuerying = true;
         this.startElapsedTimer();
+        this.updateChatInterface(); // Update UI to show loading state
+        this.displayMessages(); // Show loading animation immediately
 
         try {
             const response = await this.chatQuery(
@@ -699,6 +715,7 @@ class RAGApp {
             };
 
             this.addMessage(assistantMessage);
+            this.displayMessages(); // Remove loading animation and show response
             
             // Update conversation title based on first user message
             if (this.state.currentConversation && this.state.currentConversation.title === 'New Chat' && this.state.currentConversation.messages.length === 1) {
@@ -711,6 +728,7 @@ class RAGApp {
         } finally {
             this.state.isQuerying = false;
             this.stopElapsedTimer();
+            this.updateChatInterface(); // Update UI to hide loading state
         }
     }
 
@@ -740,8 +758,8 @@ class RAGApp {
         noIndexMessage.classList.add('hidden');
         welcomeMessage.classList.add('hidden');
 
-        // Clear existing messages (except system messages)
-        const existingMessages = messagesContainer.querySelectorAll('.message');
+        // Clear existing messages (except system messages) and loading animation
+        const existingMessages = messagesContainer.querySelectorAll('.message, .generating-message');
         existingMessages.forEach(msg => msg.remove());
 
         // Display messages
@@ -788,16 +806,33 @@ class RAGApp {
                 
                 const sourceHeader = document.createElement('div');
                 sourceHeader.className = 'source-header';
+                
+                // Handle different field names from backend (file vs file_path, line_start vs start_line)
+                const filePath = source.file || source.file_path || source.path || 'unknown';
+                const lineStart = source.line_start || source.start_line || 1;
+                const lineEnd = source.line_end || source.end_line || lineStart;
+                const score = source.score !== undefined ? ` (${(source.score * 100).toFixed(0)}%)` : '';
+                
+                // Debug logging
+                console.log('Source data:', {
+                    file: source.file,
+                    line_start: source.line_start,
+                    line_end: source.line_end,
+                    score: source.score,
+                    computed: { filePath, lineStart, lineEnd, score }
+                });
+                
                 sourceHeader.innerHTML = `
                     <i data-lucide="file-text"></i>
-                    <span class="source-file">${source.file_path}</span>
-                    <span class="source-lines">(lines ${source.start_line}-${source.end_line})</span>
+                    <span class="source-file">${filePath}</span>
+                    <span class="source-lines">(lines ${lineStart}-${lineEnd})${score}</span>
                 `;
                 sourceDiv.appendChild(sourceHeader);
 
                 const sourceCode = document.createElement('div');
                 sourceCode.className = 'source-code';
-                sourceCode.textContent = source.content.substring(0, 200) + '...';
+                const content = source.content || '';
+                sourceCode.textContent = content.length > 200 ? content.substring(0, 200) + '...' : content;
                 sourceDiv.appendChild(sourceCode);
 
                 sourcesDiv.appendChild(sourceDiv);
@@ -820,9 +855,13 @@ class RAGApp {
         const generatingDiv = document.createElement('div');
         generatingDiv.className = 'generating-message';
         generatingDiv.innerHTML = `
-            <i data-lucide="loader-2" class="generating-spinner"></i>
-            <span>Generating response...</span>
-            <span class="generating-timer">${Math.floor(this.state.elapsedMs / 1000)}s</span>
+            <div class="flex items-center gap-3">
+                <span class="loading loading-infinity loading-md text-primary"></span>
+                <div class="flex flex-col">
+                    <span class="text-sm font-medium">AI is thinking...</span>
+                    <span class="text-xs text-gray-500 generating-timer">${Math.floor(this.state.elapsedMs / 1000)}s</span>
+                </div>
+            </div>
         `;
         return generatingDiv;
     }

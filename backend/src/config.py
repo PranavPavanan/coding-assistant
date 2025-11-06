@@ -31,7 +31,14 @@ Guidelines:
 5. Focus on answering the actual question directly and concisely
 6. Reference the repository/codebase naturally (e.g., "In this repository..." or "The codebase uses...")
 
-Answer style: Professional but conversational, as if explaining to a colleague.""",
+Special Instructions:
+- When asked about API endpoints, LIST them explicitly with their HTTP methods (GET, POST, PUT, DELETE)
+- Look for decorators like @app.get(), @app.post(), @router.get(), @router.post()
+- For FastAPI/Flask apps, identify routes by their decorator patterns
+- When you see a clear pattern (like multiple @app.post decorators), enumerate them confidently
+- Don't say "endpoints are not explicitly listed" if you can see decorator patterns in the code
+
+Answer style: Professional but conversational, as if explaining to a colleague. Be confident when the evidence is clear.""",
         "stop_tokens": ["<|end|>", "<|endoftext|>", "<|user|>", "<|assistant|>", "\n\nUser Question:", "\n\nFile:"],
         "prompt_format": "phi3"  # Phi-3 uses special format
     },
@@ -53,7 +60,14 @@ Guidelines:
 5. Focus on answering the actual question directly and concisely
 6. Reference the repository/codebase naturally (e.g., "In this repository..." or "The codebase uses...")
 
-Answer style: Professional but conversational, as if explaining to a colleague.""",
+Special Instructions:
+- When asked about API endpoints, LIST them explicitly with their HTTP methods (GET, POST, PUT, DELETE)
+- Look for decorators like @app.get(), @app.post(), @router.get(), @router.post()
+- For FastAPI/Flask apps, identify routes by their decorator patterns
+- When you see a clear pattern (like multiple @app.post decorators), enumerate them confidently
+- Don't say "endpoints are not explicitly listed" if you can see decorator patterns in the code
+
+Answer style: Professional but conversational, as if explaining to a colleague. Be confident when the evidence is clear.""",
         "stop_tokens": ["</s>", "[INST]", "<|endoftext|>", "\n\nUser Question:", "\n\nFile:"],
         "prompt_format": "llama2"
     },
@@ -75,7 +89,14 @@ Guidelines:
 5. Focus on answering the actual question directly and concisely
 6. Reference the repository/codebase naturally (e.g., "In this repository..." or "The codebase uses...")
 
-Answer style: Professional but conversational, as if explaining to a colleague.""",
+Special Instructions:
+- When asked about API endpoints, LIST them explicitly with their HTTP methods (GET, POST, PUT, DELETE)
+- Look for decorators like @app.get(), @app.post(), @router.get(), @router.post()
+- For FastAPI/Flask apps, identify routes by their decorator patterns
+- When you see a clear pattern (like multiple @app.post decorators), enumerate them confidently
+- Don't say "endpoints are not explicitly listed" if you can see decorator patterns in the code
+
+Answer style: Professional but conversational, as if explaining to a colleague. Be confident when the evidence is clear.""",
         "stop_tokens": ["<|end_of_text|>", "<|eot_id|>", "\n\nUser Question:", "\n\nFile:"],
         "prompt_format": "llama3"
     }

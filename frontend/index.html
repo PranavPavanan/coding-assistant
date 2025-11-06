@@ -7,65 +7,70 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>RAG GitHub Assistant</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="container">
-            <div class="header-content">
-                <div class="logo">
-                    <div class="logo-icon">
-                        <i data-lucide="github"></i>
-                        <i data-lucide="sparkles"></i>
-                    </div>
-                    <div class="logo-text">
-                        <h1>RAG GitHub Assistant</h1>
-                        <p>AI-powered code exploration and intelligent Q&A</p>
-                    </div>
+    <!-- App Shell -->
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i data-lucide="github"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>RAG GitHub Assistant</h1>
+                    <p>Search • Index • Ask</p>
                 </div>
             </div>
-        </div>
-    </header>
-
-    <!-- Tab Navigation -->
-    <nav class="tab-navigation">
-        <div class="container">
-            <div class="tabs">
-                <button class="tab active" data-tab="search">
+            <nav class="side-nav">
+                <button class="nav-item active" data-route="search">
                     <i data-lucide="search"></i>
-                    <div class="tab-content">
-                        <div class="tab-label">Search</div>
-                        <div class="tab-description">Find repositories</div>
-                    </div>
+                    <span>Search</span>
                 </button>
-                <button class="tab" data-tab="indexing">
+                <button class="nav-item" data-route="index">
                     <i data-lucide="database"></i>
-                    <div class="tab-content">
-                        <div class="tab-label">Index</div>
-                        <div class="tab-description">Index repository</div>
-                    </div>
+                    <span>Index</span>
                 </button>
-                <button class="tab" data-tab="chat" disabled>
+                <button class="nav-item" data-route="chat" disabled>
                     <i data-lucide="message-square"></i>
-                    <div class="tab-content">
-                        <div class="tab-label">Query</div>
-                        <div class="tab-description">Ask questions</div>
-                    </div>
+                    <span>Chat</span>
                 </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div id="status-chip" class="status-chip">
+                    <span class="dot"></span>
+                    <span id="status-text">No index</span>
+                </div>
             </div>
-        </div>
-    </nav>
+        </aside>
 
-    <!-- Main Content -->
-    <main class="main">
-        <div class="container">
-            <!-- Search Tab -->
-            <div id="search-tab" class="tab-content active">
+        <!-- Main Content -->
+        <main class="workspace">
+            <header class="workspace-header">
+                <div class="header-left">
+                    <div class="headline">
+                        <i data-lucide="sparkles"></i>
+                        <h2 id="headline-text">Welcome</h2>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div id="repo-banner" class="repo-banner hidden">
+                        <i data-lucide="code"></i>
+                        <span class="label">Indexed:</span>
+                        <span id="repo-banner-name" class="repo-name"></span>
+                        <span class="muted">|</span>
+                        <span id="repo-banner-files" class="muted"></span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Panels -->
+            <section id="panel-search" class="panel active">
                 <div class="search-section">
                     <div class="card">
                         <div class="card-header">
@@ -127,10 +132,9 @@
                         <div id="results-list" class="results-list"></div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Indexing Tab -->
-            <div id="indexing-tab" class="tab-content">
+            <section id="panel-index" class="panel">
                 <div class="indexing-section">
                     <div class="card">
                         <div class="card-header">
@@ -220,10 +224,9 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- Chat Tab -->
-            <div id="chat-tab" class="tab-content">
+            <section id="panel-chat" class="panel">
                 <div class="chat-container">
                     <!-- Conversation Tabs -->
                     <div id="conversation-tabs" class="conversation-tabs hidden">
@@ -294,29 +297,14 @@
                         </form>
                     </div>
 
-                    <!-- Index Stats -->
-                    <div id="index-stats-bar" class="index-stats-bar hidden">
-                        <div class="stats-content">
-                            <i data-lucide="code"></i>
-                            <span>Querying:</span>
-                            <span id="stats-repo-name" class="repo-name"></span>
-                            <span class="stats-count" id="stats-file-count">0 files indexed</span>
-                        </div>
-                    </div>
+                    
                 </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <p>In progress</p>
-        </div>
-    </footer>
+            </section>
+        </main>
+    </div>
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
-    <script src="app.js?v=3"></script>
+    <script src="app.js?v=4"></script>
 </body>
 </html>

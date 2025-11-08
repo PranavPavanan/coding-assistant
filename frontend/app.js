@@ -47,13 +47,16 @@ class RAGApp {
       // UI
       route: 'search',
       elapsedMs: 0,
-      elapsedTimer: null
+      elapsedTimer: null,
+      // Theme
+      theme: 'system'
     };
     this.init();
   }
 
   init() {
-    this.ensureToastContainer();
+  this.ensureToastContainer();
+  this.initTheme();
     this.bindNav();
     this.bindEvents();
     this.loadIndexStats();
@@ -132,6 +135,10 @@ class RAGApp {
 
   // Events binding (forms/buttons)
   bindEvents() {
+    // Theme toggle
+    const themeBtn = document.getElementById('theme-toggle');
+    if (themeBtn) themeBtn.addEventListener('click', () => this.toggleTheme());
+
     // Search
     const searchForm = document.getElementById('search-form');
     if (searchForm) searchForm.addEventListener('submit', (e) => { e.preventDefault(); this.handleSearch(); });
@@ -506,6 +513,65 @@ class RAGApp {
         if (input && !input.disabled) { e.preventDefault(); input.focus(); }
       }
     });
+  }
+
+  // Theme handling
+  initTheme() {
+    try {
+      const stored = localStorage.getItem('rag.theme');
+      if (stored === 'light' || stored === 'dark') {
+        this.state.theme = stored;
+        this.applyTheme(stored);
+      } else {
+        this.state.theme = 'system';
+        this.applyTheme('system');
+      }
+    } catch {
+      this.state.theme = 'system';
+      this.applyTheme('system');
+    }
+  }
+  getSystemTheme() { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  applyTheme(mode) {
+    const root = document.documentElement;
+    const btn = document.getElementById('theme-toggle');
+    const label = document.querySelector('.theme-switch-label');
+    let effective = 'light';
+    if (mode === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+      btn?.setAttribute('data-mode', 'dark');
+      btn?.setAttribute('aria-label', 'Switch to light theme');
+      btn?.setAttribute('aria-checked', 'true');
+      effective = 'dark';
+    } else if (mode === 'light') {
+      root.setAttribute('data-theme', 'light');
+      btn?.setAttribute('data-mode', 'light');
+      btn?.setAttribute('aria-label', 'Switch to dark theme');
+      btn?.setAttribute('aria-checked', 'false');
+      effective = 'light';
+    } else {
+      // system
+      root.removeAttribute('data-theme');
+      const sys = this.getSystemTheme();
+      btn?.setAttribute('data-mode', sys);
+      btn?.setAttribute('aria-label', `Switch to ${sys === 'dark' ? 'light' : 'dark'} theme`);
+      btn?.setAttribute('aria-checked', sys === 'dark' ? 'true' : 'false');
+      effective = sys;
+    }
+    if (label) label.textContent = effective.charAt(0).toUpperCase() + effective.slice(1);
+    this.icons();
+  }
+  setThemeIcon() { /* no-op: switch shows both icons */ }
+  toggleTheme() {
+    const next = this.resolveNextTheme();
+    this.state.theme = next;
+    try { localStorage.setItem('rag.theme', next); } catch {}
+    this.applyTheme(next);
+  }
+  resolveNextTheme() {
+    // Cycle between light and dark only (manual override)
+    const current = this.state.theme === 'system' ? this.getSystemTheme() : this.state.theme;
+    return current === 'dark' ? 'light' : 'dark';
   }
 }
 
